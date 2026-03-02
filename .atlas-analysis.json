@@ -1,0 +1,164 @@
+{
+  "projectType": "saas",
+  "projectName": "Private Connect",
+  "projectDescription": "Securely connect and access private services across any environment, no VPNs, no firewall rules.",
+  "theme": "aspen",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "core/expose-services",
+              "core/reach-services",
+              "core/share-collaborate"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "cli/overview",
+              "cli/up",
+              "cli/expose",
+              "cli/reach",
+              "cli/share",
+              "cli/join",
+              "cli/clone",
+              "cli/tunnel",
+              "cli/proxy",
+              "cli/daemon",
+              "cli/dev",
+              "cli/mcp"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/agent-orchestration",
+              "advanced/development-mode",
+              "advanced/dns-integration",
+              "advanced/broker-mode",
+              "advanced/monitoring"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/tailscale",
+              "integrations/ngrok",
+              "integrations/kubernetes",
+              "integrations/ai-teams"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "REST API",
+            "pages": [
+              "api/agents",
+              "api/services",
+              "api/tunnels",
+              "api/shares",
+              "api/webhooks"
+            ]
+          },
+          {
+            "group": "SDK",
+            "pages": [
+              "sdk/overview",
+              "sdk/typescript",
+              "sdk/agents-api",
+              "sdk/services-api",
+              "sdk/sessions-api"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Learn",
+            "pages": [
+              "resources/use-cases",
+              "resources/architecture",
+              "resources/security",
+              "resources/troubleshooting"
+            ]
+          },
+          {
+            "group": "Self-Hosting",
+            "pages": [
+              "self-hosting/overview",
+              "self-hosting/docker",
+              "self-hosting/source"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Zero-config service tunneling",
+    "Access services by name from anywhere",
+    "Share environments instantly with teammates",
+    "Agent orchestration and messaging",
+    "End-to-end encrypted tunnels",
+    "Works with Tailscale, VPN, or plain internet",
+    "CLI tool with daemon mode",
+    "TypeScript SDK for programmatic access",
+    "Self-hostable with Docker"
+  ],
+  "publicApiSurface": [
+    "connect up",
+    "connect expose",
+    "connect reach",
+    "connect share",
+    "connect join",
+    "connect clone",
+    "connect tunnel",
+    "connect proxy",
+    "connect daemon",
+    "connect dev",
+    "connect mcp",
+    "connect broker",
+    "PrivateConnect SDK class",
+    "agents.list()",
+    "agents.findByCapability()",
+    "agents.sendMessage()",
+    "agents.broadcast()",
+    "services.list()",
+    "services.get()",
+    "services.getConnection()",
+    "sessions.create()",
+    "sessions.end()",
+    "/v1/agents",
+    "/v1/services",
+    "/v1/tunnels",
+    "/v1/shares",
+    "/v1/webhooks"
+  ]
+}
