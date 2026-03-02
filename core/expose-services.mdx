@@ -1,0 +1,345 @@
+---
+title: Expose Services
+description: Make local services accessible through Private Connect tunnels
+icon: upload
+---
+
+## Overview
+
+The `connect expose` command creates a secure tunnel that makes your local services accessible to other agents in your workspace. Whether it's a database, API, or any TCP/UDP service, Private Connect handles the networking so you can focus on development.
+
+<Note>
+  **Quick Start**: Use the shorthand `connect <target>` instead of `connect expose <target>` for faster commands.
+</Note>
+
+## Basic Usage
+
+<Steps>
+  <Step title="Expose a service">
+    Run the command on the machine where your service is running:
+    
+    ```bash
+    connect expose localhost:5432 --name prod-db
+    ```
+    
+    **Output:**
+    ```
+    🔗 Exposing localhost:5432 as "prod-db"...
+       Agent ID: 550e8400-e29b-41d4-a716-446655440000
+       Label:    laptop
+       Hub URL:  https://api.privateconnect.co
+    
+    [ok] Service registered
+       Service ID: svc_abc123
+       Tunnel Port: 40001
+       Protocol: tcp
+    
+    [ok] Connected to hub
+    [ok] Tunnel established
+    
+    📡 Service "prod-db" is now accessible through the hub
+    
+       From another machine:
+       $ connect reach prod-db
+       This creates a local tunnel so the service appears on localhost
+    
+       Running initial diagnostics...
+    
+    [ok] prod-db is REACHABLE
+         DNS [ok]  TCP [ok]  45ms
+    
+       Press Ctrl+C to stop exposing
+    ```
+  </Step>
+  
+  <Step title="Service is now available">
+    Your service is now accessible to other agents in your workspace through the hub.
+    
+    <Tip>
+      The tunnel stays active as long as the command is running. Press Ctrl+C to stop exposing the service.
+    </Tip>
+  </Step>
+</Steps>
+
+## Auto-Naming
+
+Private Connect automatically generates service names based on the port:
+
+```bash
+connect localhost:5432              # Auto-named "postgres"
+connect localhost:6379              # Auto-named "redis"
+connect localhost:3306              # Auto-named "mysql"
+connect localhost:27017             # Auto-named "mongo"
+```
+
+<Tabs>
+  <Tab title="PostgreSQL">
+    ```bash
+    connect localhost:5432
+    # Auto-named: postgres
+    ```
+  </Tab>
+  <Tab title="Redis">
+    ```bash
+    connect localhost:6379
+    # Auto-named: redis
+    ```
+  </Tab>
+  <Tab title="Custom API">
+    ```bash
+    connect localhost:8080 --name my-api
+    # Explicit name for non-standard ports
+    ```
+  </Tab>
+</Tabs>
+
+## Protocol Support
+
+Private Connect supports multiple protocols with automatic detection:
+
+<CodeGroup>
+```bash TCP (default)
+connect expose localhost:5432 --protocol tcp
+```
+
+```bash HTTP
+connect expose localhost:3000 --protocol http
+```
+
+```bash HTTPS
+connect expose localhost:443 --protocol https
+```
+
+```bash UDP
+connect expose localhost:53 --protocol udp
+```
+
+```bash Auto-detect
+connect expose localhost:3000 --protocol auto
+# Automatically detects HTTP/HTTPS/TCP
+```
+</CodeGroup>
+
+<Note>
+  The `--protocol` flag defaults to `auto`, which intelligently detects the protocol based on traffic patterns.
+</Note>
+
+## Public URLs
+
+Create a public URL that anyone can access, perfect for webhooks and demos:
+
+```bash
+connect expose localhost:3000 --public
+```
+
+**Output:**
+```
+🌐 Public URL: https://abc123.privateconnect.co
+   External services (Stripe, GitHub, etc.) can send webhooks to this URL
+
+📡 Service "my-app" is now accessible through the hub
+
+   Public URL: https://abc123.privateconnect.co
+   Anyone can reach this service at the URL above
+```
+
+<Warning>
+  Public URLs are **not recommended** for database services (PostgreSQL, MySQL, Redis, etc.). Use `connect reach` instead for secure peer-to-peer connections.
+</Warning>
+
+### Database Services
+
+Private Connect automatically prevents public URLs for database ports:
+
+```bash
+connect expose localhost:5432 --public
+```
+
+**Output:**
+```
+[!] --public creates a public HTTP URL, which doesn't work for database/TCP services (port 5432).
+    To access this service remotely, use: connect reach prod-db
+```
+
+Protected ports: `5432` (PostgreSQL), `3306` (MySQL), `27017` (MongoDB), `6379` (Redis), and more.
+
+## Temporary Share Links
+
+Create time-limited share links with the `--link` flag:
+
+```bash
+connect expose localhost:3000 --link --link-expires 24h
+```
+
+**Output:**
+```
+🔗 Public URL: https://x7k9m2.privateconnect.co
+   Expires: Mon Mar 03 2026 23:44:00 GMT
+```
+
+<Tip>
+  Share links are perfect for demos and temporary access. They automatically expire after the specified duration.
+</Tip>
+
+## Debug Mode
+
+Enable live traffic inspection with the `--debug` flag:
+
+```bash
+connect expose localhost:3000 --debug
+```
+
+**Output:**
+```
+🔍 Debug mode enabled
+   Share this link: https://app.privateconnect.co/debug/abc123
+   Anyone with this link can see live traffic
+```
+
+With AI assistance:
+
+```bash
+connect expose localhost:3000 --debug --ai
+```
+
+**Output:**
+```
+🔍 Debug mode enabled
+   Share this link: https://app.privateconnect.co/debug/abc123
+   Anyone with this link can see live traffic
+   AI Copilot: enabled
+```
+
+<Note>
+  See the [Live Debugging](/debugging) guide for complete debug mode documentation.
+</Note>
+
+## Command Options
+
+| Option | Description | Example |
+|--------|-------------|----------|
+| `--name <name>` | Service name (required for non-standard ports) | `--name prod-db` |
+| `--protocol <type>` | Protocol: `auto`, `tcp`, `http`, `https`, `udp` | `--protocol tcp` |
+| `--public` | Create a public URL | `--public` |
+| `--link` | Create a temporary share link | `--link` |
+| `--link-expires <time>` | Link expiration: `1h`, `24h`, `7d` | `--link-expires 24h` |
+| `--debug` | Enable debug mode with traffic viewer | `--debug` |
+| `--ai` | Enable AI copilot in debug sessions | `--ai` |
+| `--hub <url>` | Hub URL (defaults to production) | `--hub https://api.privateconnect.co` |
+| `--api-key <key>` | API key for authentication | `--api-key pc_xxx` |
+| `--config <path>` | Path to config file | `--config ~/.connect/config.json` |
+
+## Examples
+
+<CodeGroup>
+```bash PostgreSQL Database
+# Expose PostgreSQL with explicit name
+connect expose localhost:5432 --name prod-db
+
+# Teammates can connect with:
+connect reach prod-db
+```
+
+```bash HTTP API
+# Expose HTTP API with public URL
+connect expose localhost:8080 --name api --public
+
+# Access from anywhere:
+curl https://abc123.privateconnect.co/health
+```
+
+```bash Webhook Endpoint
+# Create temporary webhook endpoint
+connect expose localhost:3000 --link --link-expires 1h
+
+# Use in Stripe dashboard:
+https://x7k9m2.privateconnect.co/webhooks/stripe
+```
+
+```bash Internal Service
+# Expose internal service on custom network
+connect expose 192.168.1.50:8080 --name internal-api
+```
+
+```bash Debug Mode
+# Expose with live traffic inspection
+connect expose localhost:3000 --debug --ai
+
+# Share debug link with teammates for pair-debugging
+```
+</CodeGroup>
+
+## Diagnostics
+
+Private Connect automatically runs health checks when exposing services:
+
+```bash
+connect expose localhost:3000 --name api
+```
+
+**Output:**
+```
+[ok] Tunnel established
+
+   Running initial diagnostics...
+
+[ok] api is REACHABLE
+     DNS [ok]  TCP [ok]  HTTP [ok]  32ms
+```
+
+If the service is unreachable:
+
+```
+[x] api is UNREACHABLE
+    TCP connection failed: ECONNREFUSED
+
+    Check that your service is running on the target port
+```
+
+<Tip>
+  Diagnostics help you catch configuration issues early. If a service is unreachable, verify it's running on the correct port before exposing it.
+</Tip>
+
+## First-Time Setup
+
+If you haven't authenticated yet, Private Connect will prompt you:
+
+```bash
+connect expose localhost:5432 --name db
+```
+
+**Output:**
+```
+[x] API key required for first-time setup
+  Run connect login <your-api-key> to save it once
+  Or use: connect expose <target> --api-key <your-api-key>
+```
+
+Authenticate once:
+
+```bash
+connect up --api-key pc_xxx
+```
+
+Then expose services without the API key:
+
+```bash
+connect expose localhost:5432 --name db
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reach Services" icon="download" href="/core/reach-services">
+    Connect to exposed services from any machine
+  </Card>
+  <Card title="Share & Collaborate" icon="users" href="/core/share-collaborate">
+    Share your environment with teammates
+  </Card>
+  <Card title="Live Debugging" icon="bug" href="/debugging">
+    Inspect traffic in real-time with debug mode
+  </Card>
+  <Card title="Public Links" icon="link" href="/public-links">
+    Create shareable URLs for webhooks and demos
+  </Card>
+</CardGroup>

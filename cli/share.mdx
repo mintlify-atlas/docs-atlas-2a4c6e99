@@ -1,0 +1,248 @@
+---
+title: connect share
+description: Create a shareable environment snapshot
+---
+
+The `connect share` command creates a share code that allows teammates to instantly access all your currently exposed services with a single command.
+
+## Usage
+
+```bash
+connect share [options]
+```
+
+## Options
+
+<ParamField path="--name" type="string">
+  Friendly name for the share
+</ParamField>
+
+<ParamField path="--expires" type="string" default="24h">
+  Expiration duration (e.g., "1h", "4h", "24h", "7d")
+</ParamField>
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+## Examples
+
+### Create a Share
+
+```bash
+connect share
+```
+
+Output:
+```
+🤝 Creating environment share...
+
+[ok] Environment share created!
+
+  ┌─────────────────────────────────────────────────┐
+  │  Share Code: abc123                             │
+  └─────────────────────────────────────────────────┘
+
+  Your teammate can join with:
+
+    connect join abc123
+
+  Routes being shared:
+    • postgres → localhost:5432
+    • redis → localhost:6379
+    • api → localhost:8080
+
+  Expires in 24 hours (Mon Jan 15 2024 10:30:00 GMT)
+```
+
+### Named Share
+
+```bash
+connect share --name "staging-env"
+```
+
+Output:
+```
+[ok] Environment share created!
+
+  ┌─────────────────────────────────────────────────┐
+  │  Share Code: xyz789                             │
+  └─────────────────────────────────────────────────┘
+
+  Name: staging-env
+  Expires in 24 hours
+```
+
+### Custom Expiration
+
+```bash
+connect share --expires 7d --name "demo-environment"
+```
+
+```bash
+connect share --expires 1h  # Short-lived share
+```
+
+## List Active Shares
+
+```bash
+connect share --list
+```
+
+Output:
+```
+📋 Active Environment Shares
+
+  abc123 (staging-env)
+    Routes: 3 | Joined: 2 | Expires: 22h
+
+  xyz789 (demo-environment)
+    Routes: 5 | Joined: 0 | Expires: 6d
+```
+
+## Revoke a Share
+
+```bash
+connect share --revoke abc123
+```
+
+Output:
+```
+[ok] Share abc123 revoked.
+```
+
+## Behavior
+
+### What Gets Shared
+
+When you create a share:
+- All currently exposed services via `connect expose`
+- Port mappings for each service
+- Service metadata (name, protocol)
+
+What is **not** shared:
+- Credentials or secrets
+- Service data or state
+- Agent configuration
+
+### Share Lifecycle
+
+1. **Create**: Share code generated, services snapshotted
+2. **Active**: Teammates can join using the code
+3. **Expired**: Code no longer valid, teammates disconnected
+4. **Revoked**: Code immediately invalidated
+
+### Join Tracking
+
+The share tracks:
+- Number of times the code was used
+- Which agents joined
+- When they joined
+
+### Automatic Expiration
+
+Shares automatically expire after the specified duration:
+- `1h` = 1 hour
+- `4h` = 4 hours  
+- `24h` = 24 hours (default)
+- `7d` = 7 days
+
+## Use Cases
+
+### Onboarding
+
+Quickly onboard new teammates:
+
+```bash
+# You:
+connect expose localhost:5432 --name postgres
+connect expose localhost:6379 --name redis
+connect share --name "dev-environment" --expires 7d
+
+# New teammate:
+connect join abc123
+```
+
+### Pair Programming
+
+Share your local environment for pair programming:
+
+```bash
+connect share --expires 4h --name "pairing-session"
+```
+
+### Demos
+
+Create a temporary environment for demos:
+
+```bash
+connect share --expires 1h --name "sales-demo"
+```
+
+### Code Reviews
+
+Share a feature branch environment:
+
+```bash
+connect expose localhost:3000 --name feature-api
+connect share --name "PR-1234" --expires 24h
+```
+
+## Exit Codes
+
+- `0` - Share created successfully
+- `1` - Agent not configured, network error, or invalid options
+
+## Related Commands
+
+- [`connect join`](/cli/join) - Join a shared environment
+- [`connect expose`](/cli/expose) - Expose services to include in shares
+- [`connect clone`](/cli/clone) - Alternative way to clone environments
+
+## Troubleshooting
+
+### No Services to Share
+
+If you haven't exposed any services:
+
+```
+[ok] Environment share created!
+  Routes being shared: (none)
+```
+
+Expose services first:
+```bash
+connect expose localhost:5432 --name postgres
+connect share
+```
+
+### Connection Refused
+
+```bash
+[x] Cannot connect to hub at https://hub.privateconnect.co
+  Make sure the hub is running and accessible.
+```
+
+Check:
+1. Internet connection
+2. Hub URL is correct
+3. Agent is authenticated: `connect up`
+
+### Invalid Expiration Format
+
+```bash
+connect share --expires 2weeks  # ❌ Invalid
+```
+
+```
+[x] Invalid expires format. Use: 1h, 4h, 24h, 7d, etc.
+```
+
+Use valid format:
+```bash
+connect share --expires 14d  # ✅ Correct
+```

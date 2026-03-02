@@ -1,0 +1,300 @@
+---
+title: 'TypeScript SDK'
+description: 'TypeScript setup and type definitions for Private Connect SDK'
+---
+
+The Private Connect SDK is written in TypeScript and provides comprehensive type definitions for all methods, parameters, and return types.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @privateconnect/sdk
+```
+
+```bash yarn
+yarn add @privateconnect/sdk
+```
+
+```bash pnpm
+pnpm add @privateconnect/sdk
+```
+</CodeGroup>
+
+## Basic Setup
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({
+  apiKey: process.env.PRIVATECONNECT_API_KEY!,
+  agentId: 'my-agent',
+});
+```
+
+## Type Definitions
+
+### PrivateConnectConfig
+
+Configuration options for initializing the SDK client.
+
+```typescript
+interface PrivateConnectConfig {
+  /** API key for authentication */
+  apiKey: string;
+  /** Hub URL (default: https://api.privateconnect.co) */
+  hubUrl?: string;
+  /** Agent ID (auto-detected from config if not provided) */
+  agentId?: string;
+  /** Disable usage tracking (default: false) */
+  disableTracking?: boolean;
+}
+```
+
+### Service
+
+Represents a service exposed through Private Connect.
+
+```typescript
+interface Service {
+  id: string;
+  name: string;
+  targetHost: string;
+  targetPort: number;
+  tunnelPort?: number;
+  protocol: string;
+  status: string;
+  agentLabel?: string;
+}
+```
+
+### Agent
+
+Represents an agent in the Private Connect workspace.
+
+```typescript
+interface Agent {
+  id: string;
+  name?: string;
+  label: string;
+  isOnline: boolean;
+  lastSeenAt: string;
+  capabilities: string[];
+  services: string[];
+}
+```
+
+### Connection
+
+Connection details for a service.
+
+```typescript
+interface Connection {
+  service: string;
+  host: string;
+  port: number;
+  connectionString: string;
+  envVar: string;
+}
+```
+
+### Message
+
+Represents a message between agents.
+
+```typescript
+interface Message {
+  id: string;
+  from: { id: string; name?: string; label?: string };
+  channel: string;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  isRead: boolean;
+}
+```
+
+### Session
+
+Represents an orchestration session.
+
+```typescript
+interface Session {
+  id: string;
+  name: string;
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+## Usage Examples
+
+### Type-Safe Service Connections
+
+```typescript
+import { PrivateConnect, Connection } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: process.env.PRIVATECONNECT_API_KEY! });
+
+// TypeScript knows the return type is Connection
+const db: Connection = await pc.connect('postgres-prod');
+
+console.log(db.connectionString); // Type: string
+console.log(db.port); // Type: number
+```
+
+### Type-Safe Agent Discovery
+
+```typescript
+import { PrivateConnect, Agent } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: process.env.PRIVATECONNECT_API_KEY! });
+
+// TypeScript knows the return type is Agent[]
+const agents: Agent[] = await pc.agents.list({ onlineOnly: true });
+
+agents.forEach((agent) => {
+  console.log(agent.label); // Type: string
+  console.log(agent.isOnline); // Type: boolean
+  console.log(agent.capabilities); // Type: string[]
+});
+```
+
+### Type-Safe Messaging
+
+```typescript
+import { PrivateConnect, Message } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: process.env.PRIVATECONNECT_API_KEY! });
+
+// Send message with typed payload
+await pc.agents.sendMessage('target-agent-id', {
+  action: 'deploy',
+  environment: 'production',
+  version: '1.2.3',
+});
+
+// Retrieve messages with type safety
+const messages: Message[] = await pc.agents.getMessages({
+  channel: 'deployments',
+  unreadOnly: true,
+});
+
+messages.forEach((msg) => {
+  console.log(msg.payload); // Type: Record<string, unknown>
+  console.log(msg.isRead); // Type: boolean
+});
+```
+
+### Type-Safe Sessions
+
+```typescript
+import { PrivateConnect, Session } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: process.env.PRIVATECONNECT_API_KEY! });
+
+// Create session with typed metadata
+const session: Session = await pc.sessions.create('deployment-workflow', {
+  ttlMinutes: 30,
+  metadata: {
+    environment: 'production',
+    initiatedBy: 'ci-pipeline',
+  },
+});
+
+console.log(session.id); // Type: string
+console.log(session.expiresAt); // Type: string
+console.log(session.metadata?.environment); // Type: unknown
+```
+
+## Generic Type Parameters
+
+You can use TypeScript generics for strongly-typed payloads:
+
+```typescript
+interface DeploymentPayload {
+  action: 'deploy' | 'rollback';
+  environment: string;
+  version: string;
+}
+
+// Type the payload
+const payload: DeploymentPayload = {
+  action: 'deploy',
+  environment: 'production',
+  version: '1.2.3',
+};
+
+await pc.agents.sendMessage('target-agent', payload);
+```
+
+## Strict Null Checks
+
+The SDK is designed to work with TypeScript's strict null checks:
+
+```typescript
+// Enable in tsconfig.json
+{
+  "compilerOptions": {
+    "strict": true,
+    "strictNullChecks": true
+  }
+}
+```
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: process.env.PRIVATECONNECT_API_KEY! });
+
+const service = await pc.services.get('my-database');
+
+// TypeScript knows service can be null
+if (service) {
+  console.log(service.name); // Safe to access
+} else {
+  console.log('Service not found');
+}
+```
+
+## Type Exports
+
+Import types for use in your own code:
+
+```typescript
+import type {
+  PrivateConnectConfig,
+  Service,
+  Agent,
+  Connection,
+  Message,
+  Session,
+} from '@privateconnect/sdk';
+
+// Use in function signatures
+function processAgent(agent: Agent): void {
+  console.log(agent.label);
+}
+
+function handleMessage(message: Message): void {
+  console.log(message.payload);
+}
+```
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Agents API" icon="robot" href="/sdk/agents-api">
+    Agent discovery and messaging
+  </Card>
+  
+  <Card title="Services API" icon="server" href="/sdk/services-api">
+    Service connections
+  </Card>
+  
+  <Card title="Sessions API" icon="clock" href="/sdk/sessions-api">
+    Orchestration sessions
+  </Card>
+</CardGroup>

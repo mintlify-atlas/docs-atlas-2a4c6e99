@@ -1,0 +1,553 @@
+---
+title: Use Cases
+description: Real-world scenarios where Private Connect saves hours of setup and frustration
+icon: briefcase
+---
+
+Discover how teams and individuals use Private Connect to solve common infrastructure access challenges.
+
+## Team Collaboration
+
+<CardGroup cols={2}>
+  <Card title="Onboard Teammates Instantly" icon="user-plus">
+    Clone a teammate's environment in 30 seconds instead of 2 hours of setup
+  </Card>
+  <Card title="Debug Production Together" icon="users">
+    Share access to staging databases and services for collaborative debugging
+  </Card>
+  <Card title="Give Contractors Access" icon="clock">
+    Time-limited access with instant revocation, no VPN provisioning
+  </Card>
+  <Card title="Clone Team Environments" icon="copy">
+    New developers get the exact same setup as their teammates
+  </Card>
+</CardGroup>
+
+## Development Workflows
+
+<CardGroup cols={2}>
+  <Card title="Same Setup, Anywhere" icon="laptop">
+    Your .env stays the same whether at office, home, or traveling
+  </Card>
+  <Card title="Project-Based Environments" icon="folder">
+    Config files that auto-connect services when you cd into a project
+  </Card>
+  <Card title="Test Webhooks Locally" icon="webhook">
+    Receive Stripe, GitHub, and other webhooks on your local machine
+  </Card>
+  <Card title="Monitor Internal Services" icon="chart-line">
+    Quick health checks of internal dashboards from anywhere
+  </Card>
+</CardGroup>
+
+## Remote Access & AI Tools
+
+<CardGroup cols={2}>
+  <Card title="Access Your Home Lab" icon="server">
+    Reach Raspberry Pi, NAS, self-hosted services without exposing ports
+  </Card>
+  <Card title="Secure OpenCode Access" icon="code">
+    Access OpenCode on VPS from laptop without exposing ports publicly
+  </Card>
+  <Card title="Secure OpenClaw Access" icon="robot">
+    Access OpenClaw gateway securely from phone, laptop, any device
+  </Card>
+  <Card title="Access from exe.dev VMs" icon="cloud">
+    Give AI agents on exe.dev access to private infrastructure
+  </Card>
+</CardGroup>
+
+## Infrastructure & DevOps
+
+<CardGroup cols={2}>
+  <Card title="CI/CD to Private Infra" icon="infinity">
+    GitHub Actions deploying to private servers without bastion hosts
+  </Card>
+  <Card title="Virtual Kubernetes Clusters" icon="dharmachakra">
+    Multicluster API servers with distributed nodes, no VPN required
+  </Card>
+  <Card title="Open-Source Contributors" icon="code-branch">
+    Let contributors hit your prod API without sharing secrets
+  </Card>
+  <Card title="Share with Family Abroad" icon="globe">
+    Give family access to home services with long-lived secure shares
+  </Card>
+</CardGroup>
+
+---
+
+## Onboard Teammates Instantly
+
+**The old way:**
+1. "Join the VPN"
+2. "Add these entries to /etc/hosts"
+3. "Here's the SSH key for the bastion"
+4. "Forward ports 5432, 6379, and 8080"
+5. "Oh, you're on Windows? Let me find the other instructions..."
+
+**With Private Connect:**
+
+<Tabs>
+  <Tab title="Clone by Name">
+    ```bash
+    # New teammate's first day
+    connect clone sarah
+    # → Found sarah's environment:
+    # →   ● staging-db → localhost:5432
+    # →   ● redis → localhost:6379
+    # →   ● user-api → localhost:8080
+    # →   ● payment-service → localhost:8081
+    # →
+    # → ✓ Cloned 4 service(s) from sarah
+    # → Generated: .env.pconnect
+    # →
+    # → Ready to code.
+    ```
+    
+    **Time saved:** 2 hours → 30 seconds
+  </Tab>
+  
+  <Tab title="Share Code">
+    ```bash
+    # Senior dev
+    connect share
+    # → Share code: x7k9m2
+    
+    # New teammate
+    connect join x7k9m2
+    # ✓ Connected. Same environment. Done.
+    ```
+    
+    **The difference:**
+    - `connect clone` — Clone by teammate name, persistent until you disconnect
+    - `connect share/join` — Share via code, can set expiration
+  </Tab>
+</Tabs>
+
+---
+
+## Debug Production Together
+
+Two engineers need to look at the same staging database to debug an issue.
+
+```bash
+# Alice (already connected)
+connect share --name "staging-debug"
+# → Share code: k8m3n5
+
+# Bob
+connect join k8m3n5
+# ✓ staging-db → localhost:5432
+# ✓ redis → localhost:6379
+
+# Both now have identical environments
+# "I see the bug on row 4521" — "Me too, looking at it now"
+```
+
+No more "can you SSH into prod and run this query for me?"
+
+---
+
+## Same Setup, Anywhere
+
+Your `.env` stays the same whether you're at the office, home, or a café.
+
+```bash
+# .env (never changes)
+DATABASE_URL=postgres://localhost:5432/myapp
+REDIS_URL=redis://localhost:6379
+API_URL=http://localhost:8080
+```
+
+```bash
+# Morning: run this once
+connect dev
+
+# Your app connects to localhost
+# Private Connect routes to the real services
+npm run dev
+```
+
+Switch between home/office/travel without touching configuration.
+
+---
+
+## CI/CD to Private Infrastructure
+
+GitHub Actions deploying to servers that aren't publicly accessible.
+
+```yaml
+# .github/workflows/deploy.yml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Connect to private infra
+        run: |
+          curl -fsSL https://privateconnect.co/install.sh | bash
+          connect up --api-key ${{ secrets.PRIVATECONNECT_KEY }}
+          connect reach deploy-server
+          
+      - name: Deploy
+        run: |
+          # deploy-server is now at localhost:22
+          rsync -avz ./dist/ localhost:/var/www/app/
+```
+
+No bastion hosts. No VPN configurations. No firewall rules.
+
+---
+
+## Access Your Home Lab
+
+Raspberry Pi, NAS, or self-hosted services — reach them without exposing ports.
+
+```bash
+# On your home server (runs 24/7)
+connect daemon install
+connect expose localhost:8096 --name jellyfin
+connect expose localhost:8080 --name homeassistant
+connect expose 192.168.1.50:445 --name nas
+
+# From anywhere in the world
+connect reach jellyfin
+# → http://localhost:8096 — your media server
+
+connect reach nas
+# → localhost:445 — your NAS shares
+```
+
+No dynamic DNS. No port forwarding. No security exposure.
+
+---
+
+## Secure Remote Access to OpenClaw
+
+Running [OpenClaw](https://openclaw.ai) on a VPS? Access the gateway securely from your phone, laptop, or any device.
+
+**The problem:** OpenClaw's gateway binds to `127.0.0.1:18789` for security. The docs warn: never expose it publicly. But you want to use it from WhatsApp on your phone.
+
+**The solution:**
+
+```bash
+# On your VPS where OpenClaw runs
+connect daemon install
+connect expose localhost:18789 --name openclaw
+
+# From your phone or laptop (anywhere)
+connect reach openclaw
+# → Gateway available at localhost:18789
+# → WhatsApp/Telegram connects as if OpenClaw were local
+```
+
+<Accordion title="Why this beats alternatives">
+  | Feature | ngrok | Tailscale | SSH Tunnel | Private Connect |
+  |---------|-------|-----------|------------|------------------|
+  | Public URL | Yes (risky) | No | No | No |
+  | Multi-device | Limited | Yes | Manual | Yes |
+  | Persistent | Paid | Yes | No | Yes |
+  | Setup time | 2 min | 10 min | 5 min | 2 min |
+</Accordion>
+
+---
+
+## Secure Remote Access to OpenCode
+
+Running [OpenCode](https://opencode.ai) on a VPS or GPU server? Access it securely from your laptop without exposing ports.
+
+**The problem:** OpenCode's server binds to `127.0.0.1:4096` for security. Setting `--hostname 0.0.0.0` exposes you to brute-force attacks.
+
+**The solution:**
+
+```bash
+# On your VPS where OpenCode runs
+opencode serve                                    # Stays on localhost
+connect daemon install
+connect expose localhost:4096 --name opencode
+
+# From your laptop (anywhere)
+connect opencode
+opencode attach http://localhost:4096             # Works as if local
+```
+
+---
+
+## Access Private Services from exe.dev VMs
+
+Running AI agents on [exe.dev](https://exe.dev)? Give them secure access to your private infrastructure — databases, APIs, internal services — without exposing them publicly.
+
+**The problem:** exe.dev has great HTTPS proxies for exposing services, but your agent needs to *access* private infrastructure that isn't publicly exposed.
+
+**The solution:**
+
+```bash
+# On your private server (home, office, AWS)
+connect daemon install
+connect expose localhost:5432 --name prod-db
+connect expose localhost:8080 --name internal-api
+
+# On your exe.dev VM
+curl -fsSL https://privateconnect.co/install.sh | bash
+connect up
+connect prod-db
+connect internal-api
+
+# Your agent can now access:
+# → localhost:5432 (database)
+# → localhost:8080 (internal API)
+```
+
+**Also great for:**
+- Cross-VM private communication (two exe.dev VMs talking without public URLs)
+- Team collaboration on exe.dev environments
+- Integrating with exe.dev's Shelley/AGENTS.md system
+
+---
+
+## Virtual Kubernetes Clusters
+
+Running a multicluster or virtual Kubernetes API server (e.g. [kplane-dev/apiserver](https://github.com/kplane-dev/apiserver)) with nodes in different regions? They need to talk bidirectionally without a VPN.
+
+**The solution:**
+
+```bash
+# On the API server host
+connect expose localhost:6443 --name k8s-api
+
+# On each node (any region/cloud)
+connect reach k8s-api --port 6443
+# → Use localhost:6443 as the API server; no VPN required
+```
+
+Control plane and nodes stay private; Private Connect routes traffic by name. Works with path-based multicluster API servers and distributed worker nodes.
+
+---
+
+## Give Contractors Temporary Access
+
+External developer needs to test against your staging API for a week.
+
+```bash
+# Create a time-limited share
+connect share --expires 7d --name "acme-contractor"
+# → Share code: p4r7n3r
+
+# Contractor uses the code
+connect join p4r7n3r
+# ✓ staging-api → localhost:8080
+# Access expires automatically in 7 days
+```
+
+Revoke anytime:
+```bash
+connect share --revoke p4r7n3r
+```
+
+No VPN account to provision. No credentials to rotate. No access to revoke manually.
+
+---
+
+## Let Open-Source Contributors Hit Your Prod API
+
+Contributors need to run your frontend locally, but it requires your production API. The old way means sharing secrets, setting up local databases, or maintaining a separate dev environment.
+
+**With Private Connect:**
+
+```bash
+# Maintainer creates a public link
+connect link api --expires 30d --methods GET,POST --paths /api/v1
+# → https://abc123xyz.privateconnect.co
+```
+
+**Contributor just uses it:**
+```bash
+# .env.local (no secrets!)
+API_URL=https://abc123xyz.privateconnect.co
+
+# Run frontend
+bun dev
+# → Auth works, API calls work, no setup required
+```
+
+<AccordionGroup>
+  <Accordion title="What they get">
+    - Real API, real data (or staging)
+    - No CLI installation
+    - No account creation
+    - No secrets on their machine
+    - Auth flows work naturally
+  </Accordion>
+  
+  <Accordion title="Safety controls">
+    ```bash
+    # Read-only access
+    connect link api --methods GET
+    
+    # Specific paths only
+    connect link api --paths /api/public,/health
+    
+    # Rate limited
+    connect link api --rate-limit 100
+    
+    # Revoke anytime
+    # (from web dashboard or API)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+Perfect for: open-source projects, contractor onboarding, demo environments.
+
+---
+
+## Monitor Internal Services
+
+Check if internal dashboards are responding, from anywhere.
+
+```bash
+# Quick health check
+connect reach grafana --check
+# ✓ DNS OK
+# ✓ TCP OK  
+# ✓ HTTP 200 OK
+# ✓ Latency: 45ms
+
+# Actually connect and open it
+connect reach grafana
+open http://localhost:3000
+```
+
+---
+
+## Test Webhooks from Stripe, GitHub, etc.
+
+Local development needs to receive webhooks from external services.
+
+```bash
+# Expose your local server with a public URL
+connect expose localhost:3000 --name webhook-test --public
+# → https://abc123.privateconnect.co
+
+# Use that URL in Stripe/GitHub webhook settings
+# Webhooks hit your local machine
+```
+
+Like ngrok, but integrated with your team's service mesh.
+
+---
+
+## Project-Based Environments
+
+Every project knows what services it needs.
+
+```yaml
+# my-app/pconnect.yml
+services:
+  - name: staging-db
+    port: 5432
+  - name: redis
+    port: 6379
+  - name: user-service
+    port: 8081
+  - name: payment-service
+    port: 8082
+```
+
+```bash
+cd my-app
+connect dev
+# ✓ Connected: staging-db, redis, user-service, payment-service
+
+npm run dev
+# App works. All services available at localhost.
+```
+
+Clone a repo, run `connect dev`, start coding. That's it.
+
+<Note>
+  Config file can be `pconnect.yml`, `pconnect.yaml`, or `pconnect.json`
+</Note>
+
+---
+
+## Share with Family Abroad
+
+Family in another country? Give them access to your home services (Jellyfin, NAS, Home Assistant) by name.
+
+```bash
+# You (at home): expose services, then create a long-lived share
+connect expose localhost:8096 --name jellyfin
+connect expose 192.168.1.50:445 --name nas
+connect share --expires 90d --name "Family abroad"
+# → Share code: x7k9m2
+
+# Family (abroad): one-time setup, then join
+connect up
+connect join x7k9m2
+connect reach jellyfin   # → http://localhost:8096
+```
+
+Revoke anytime: `connect share --revoke x7k9m2`
+
+---
+
+## Clone Team Environments
+
+Zero-friction environment switching.
+
+```bash
+# One-time setup
+eval "$(connect shell-init)"  # Add to ~/.zshrc
+
+# Now it just works
+cd ~/projects/backend
+# → 📦 Found pconnect.yml - connecting...
+# → ✓ staging-db, redis, user-service
+
+cd ~/projects/frontend
+# → 📦 Found pconnect.yml - connecting...
+# → ✓ api-gateway, auth-service
+
+# Your prompt shows what's connected
+~/projects/backend (3 services) $ 
+```
+
+No more "which terminals have my tunnels running?"
+
+---
+
+## Quick Reference
+
+```bash
+# Always-on access
+connect daemon install      # Set it and forget it
+
+# Project-based
+connect dev                 # Connect from pconnect.yml
+
+# Collaboration
+connect share               # Share your environment
+connect join <code>         # Join teammate's environment
+
+# Public links (no account needed)
+connect link <service>      # Create public URL for a service
+
+# Ad-hoc access
+connect reach <service>     # Connect to any service
+connect proxy               # All services via subdomains
+```
+
+---
+
+## Private Connect vs. Alternatives
+
+| Scenario | VPN | SSH Tunnels | Private Connect |
+|----------|-----|-------------|-----------------|
+| Onboard new dev | 2+ hours | 30+ min | 30 seconds |
+| Share environment | Not possible | Complex | One command |
+| Works from anywhere | Sometimes | Fragile | Always |
+| Revoke access | IT ticket | Find & delete keys | Instant |
+| Audit who accessed | Limited | None | Built-in |
+| Setup on new machine | Reinstall client | Copy keys | Run `connect up` |
+| Public link (no account) | Not possible | Not possible | `connect link` |

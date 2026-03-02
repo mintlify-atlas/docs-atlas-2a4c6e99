@@ -1,0 +1,489 @@
+---
+title: connect mcp
+description: AI assistant integration via Model Context Protocol
+---
+
+The `connect mcp` command integrates Private Connect with AI assistants (like Cursor, Claude Desktop, and other MCP-compatible tools) using the Model Context Protocol.
+
+## Usage
+
+```bash
+connect mcp [action] [options]
+```
+
+## Actions
+
+<ParamField path="serve">
+  Start MCP server for AI assistant communication
+</ParamField>
+
+<ParamField path="setup" default>
+  Show setup instructions for AI tools (default action)
+</ParamField>
+
+## Options
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+## Examples
+
+### Show Setup Instructions
+
+```bash
+connect mcp setup
+```
+
+Output:
+```
+🤖 AI Integration Setup
+
+  Private Connect can integrate with AI assistants like Cursor,
+  Claude Desktop, and other MCP-compatible tools.
+
+  ─── Cursor IDE ───
+
+  Add to ~/.cursor/mcp.json:
+
+    {
+        "mcpServers": {
+            "private-connect": {
+                "command": "/usr/local/bin/connect",
+                "args": ["mcp", "serve"]
+            }
+        }
+    }
+
+  ─── Claude Desktop ───
+
+  Add to ~/Library/Application Support/Claude/claude_desktop_config.json:
+
+    {
+        "mcpServers": {
+            "private-connect": {
+                "command": "/usr/local/bin/connect",
+                "args": ["mcp", "serve"]
+            }
+        }
+    }
+
+  ─── What AI can do ───
+
+  Once configured, AI assistants can:
+    • List available services
+    • Connect to databases and APIs
+    • Check service health
+    • Share environments with teammates
+
+  Example prompts:
+
+    "List all my connected services"
+    "Connect to the staging database"
+    "Check if the user-service is healthy"
+    "Share my current environment for 24 hours"
+```
+
+### Start MCP Server
+
+```bash
+connect mcp serve
+```
+
+This command is typically invoked by AI tools, not directly by users. It:
+- Reads JSON-RPC messages from stdin
+- Implements MCP protocol
+- Provides tools and resources to AI
+- Writes responses to stdout
+
+## Available Tools
+
+When connected, AI assistants have access to these tools:
+
+### Service Management
+
+<ParamField path="list_services">
+  List all services in the Private Connect network
+  
+  **Arguments:**
+  - `status`: Filter by "all", "online", or "offline"
+</ParamField>
+
+<ParamField path="reach_service">
+  Connect to a service and create a local tunnel
+  
+  **Arguments:**
+  - `service`: Service name
+  - `port`: Local port (optional)
+</ParamField>
+
+<ParamField path="check_service">
+  Run diagnostics on a service
+  
+  **Arguments:**
+  - `service`: Service name
+</ParamField>
+
+<ParamField path="expose_service">
+  Expose a local service to the network
+  
+  **Arguments:**
+  - `target`: Target to expose (e.g., "localhost:3000")
+  - `name`: Service name
+</ParamField>
+
+### Environment Sharing
+
+<ParamField path="share_environment">
+  Create a share code for teammates
+  
+  **Arguments:**
+  - `name`: Friendly name (optional)
+  - `expires`: Expiration (e.g., "24h", "7d")
+</ParamField>
+
+<ParamField path="get_connection_info">
+  Get current agent and workspace info
+</ParamField>
+
+<ParamField path="get_connection_string">
+  Get a connection string for a service
+  
+  **Arguments:**
+  - `service`: Service name
+  - `format`: "url", "env", or "json"
+</ParamField>
+
+### Agent Permission Broker
+
+<Warning>
+  These tools enforce security policies before executing operations.
+</Warning>
+
+<ParamField path="broker_check_file">
+  Check if writing to a file is allowed
+  
+  **Arguments:**
+  - `path`: File path to check
+</ParamField>
+
+<ParamField path="broker_check_command">
+  Check if running a command is allowed
+  
+  **Arguments:**
+  - `command`: Shell command to check
+</ParamField>
+
+<ParamField path="broker_write_file">
+  Write content to a file (policy-enforced)
+  
+  **Arguments:**
+  - `path`: File path
+  - `content`: File content
+</ParamField>
+
+<ParamField path="broker_run_command">
+  Run a shell command (policy-enforced)
+  
+  **Arguments:**
+  - `command`: Shell command
+  - `workingDir`: Working directory (optional)
+</ParamField>
+
+<ParamField path="broker_get_policy">
+  Get current security policy rules
+</ParamField>
+
+### Agent Orchestration
+
+<ParamField path="list_agents">
+  List all agents in the workspace
+  
+  **Arguments:**
+  - `onlineOnly`: Show only online agents
+  - `capability`: Filter by capability
+</ParamField>
+
+<ParamField path="register_capabilities">
+  Register capabilities this agent provides
+  
+  **Arguments:**
+  - `capabilities`: Array of capability objects
+</ParamField>
+
+<ParamField path="send_agent_message">
+  Send a message to another agent
+  
+  **Arguments:**
+  - `toAgentId`: Target agent ID
+  - `payload`: Message payload (JSON object)
+  - `channel`: Channel name (optional)
+  - `type`: "request", "response", or "event"
+</ParamField>
+
+<ParamField path="broadcast_message">
+  Broadcast a message to all agents
+  
+  **Arguments:**
+  - `payload`: Message payload (JSON object)
+  - `channel`: Channel name (optional)
+</ParamField>
+
+<ParamField path="get_agent_messages">
+  Get messages sent to this agent
+  
+  **Arguments:**
+  - `channel`: Filter by channel (optional)
+  - `unreadOnly`: Show only unread messages
+  - `limit`: Maximum messages to return
+</ParamField>
+
+<ParamField path="find_agents_by_capability">
+  Find agents with a specific capability
+  
+  **Arguments:**
+  - `capability`: Capability to search for
+</ParamField>
+
+<ParamField path="create_session">
+  Create an orchestration session
+  
+  **Arguments:**
+  - `name`: Session name
+  - `ttlMinutes`: Time-to-live in minutes
+  - `metadata`: Optional metadata (JSON object)
+</ParamField>
+
+<ParamField path="end_session">
+  End an orchestration session
+  
+  **Arguments:**
+  - `sessionId`: Session ID to end
+</ParamField>
+
+## Available Resources
+
+MCP resources provide read-only access to data:
+
+<ParamField path="pconnect://services">
+  List of all services in your network (JSON)
+</ParamField>
+
+<ParamField path="pconnect://status">
+  Current agent connection status and info (JSON)
+</ParamField>
+
+## Example AI Prompts
+
+Once configured, you can ask your AI assistant:
+
+### Service Discovery
+
+```
+"List all my connected services"
+"Show me only online services"
+"Which databases are available?"
+```
+
+### Service Connection
+
+```
+"Connect to the staging database"
+"Create a tunnel to the postgres service on port 5433"
+"Access the user-service API"
+```
+
+### Service Health
+
+```
+"Check if the api service is healthy"
+"Run diagnostics on the postgres database"
+"Is the staging-redis reachable?"
+```
+
+### Environment Sharing
+
+```
+"Share my current environment for 24 hours"
+"Create a share code named 'demo' that expires in 1 hour"
+"Generate connection strings for all my services"
+```
+
+### Getting Connection Info
+
+```
+"Get the DATABASE_URL for postgres"
+"Show me connection strings for all services in env format"
+"What's my agent ID?"
+```
+
+### Policy-Enforced Operations
+
+```
+"Check if I can write to src/config.ts"
+"Can I run 'npm install'?"
+"Write this config to .env.local"
+"Run the test suite"
+```
+
+### Multi-Agent Workflows
+
+```
+"List all online agents in my workspace"
+"Find agents that have GPU capability"
+"Send a message to agent xyz to start processing"
+"Create a session named 'batch-job-123' for 30 minutes"
+```
+
+## Configuration Examples
+
+### Cursor IDE
+
+Create or edit `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "private-connect": {
+      "command": "/usr/local/bin/connect",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+**macOS:**
+
+Create or edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "private-connect": {
+      "command": "/usr/local/bin/connect",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+**Linux:**
+
+Create or edit `~/.config/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "private-connect": {
+      "command": "/usr/local/bin/connect",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+## Security Policies
+
+The Agent Permission Broker enforces security policies defined in `.connect/policy.yml`:
+
+```yaml
+version: 1
+default: review  # review, allow, or block
+
+rules:
+  # Allow writes to specific directories
+  - path: "src/**/*.ts"
+    action: allow
+    reason: "Source code files"
+  
+  # Block writes to sensitive files
+  - path: ".env"
+    action: block
+    reason: "Environment variables contain secrets"
+  
+  # Allow safe commands
+  - command: "npm test"
+    action: allow
+    reason: "Running tests"
+  
+  # Block destructive commands
+  - command: "rm -rf"
+    action: block
+    reason: "Destructive file operations"
+```
+
+See [Agent Permission Broker](/features/agent-permission-broker) for details.
+
+## Exit Codes
+
+- `0` - MCP server exited normally
+- `1` - Agent not configured or MCP protocol error
+
+## Related Commands
+
+- [`connect up`](/cli/up) - Authenticate before using MCP
+- [`connect expose`](/cli/expose) - Expose services accessible to AI
+- [`connect reach`](/cli/reach) - Services AI can connect to
+
+## Troubleshooting
+
+### AI Can't Connect to MCP Server
+
+Verify the command path:
+
+```bash
+which connect
+# Use the full path in your MCP config
+```
+
+### "Agent not configured" Error
+
+Authenticate first:
+
+```bash
+connect up
+# Then restart your AI tool
+```
+
+### MCP Server Not Responding
+
+Test manually:
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | connect mcp serve
+```
+
+Should return an initialization response.
+
+### Debug MCP Communication
+
+Check your AI tool's logs:
+
+**Cursor:**
+- View → Output → Select "MCP" from dropdown
+
+**Claude Desktop:**
+- Check console logs in the app
+
+### Permission Denied Errors
+
+If broker blocks operations:
+
+1. Check policy: `.connect/policy.yml`
+2. Add allow rules for your use case
+3. Or set `default: allow` for development (not recommended for production)
+
+### Service Not Found
+
+Ensure services are exposed:
+
+```bash
+connect expose localhost:5432 --name postgres
+# Now AI can access "postgres"
+```

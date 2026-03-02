@@ -1,0 +1,608 @@
+---
+title: Security
+description: Security model, encryption, audit logging, and threat model
+icon: shield-halved
+---
+
+Understand how Private Connect protects your data and maintains workspace isolation.
+
+## Security Overview
+
+Private Connect is designed with security as a core principle. This page explains what the Hub sees, how data is encrypted, and what threats the system protects against.
+
+<CardGroup cols={2}>
+  <Card title="Encryption" icon="lock">
+    TLS 1.2+ for all connections, opaque payload relay
+  </Card>
+  <Card title="Workspace Isolation" icon="users-rectangle">
+    Database-level RLS, multi-layer isolation guarantees
+  </Card>
+  <Card title="Audit Logging" icon="clipboard-list">
+    Complete audit trail of all agent actions and access
+  </Card>
+  <Card title="Token Security" icon="key">
+    256-bit tokens, SHA-256 hashing, automatic expiry
+  </Card>
+</CardGroup>
+
+---
+
+## What the Hub Sees
+
+Understanding what the Hub can and cannot see is critical for evaluating the security model.
+
+| Data | Visibility | Notes |
+|------|------------|-------|
+| Agent identity | ✓ Visible | Agent ID, label, workspace |
+| Service names | ✓ Visible | e.g., "prod-db", "redis" |
+| Target host:port | ✓ Visible | e.g., "localhost:5432" |
+| Connection metadata | ✓ Visible | When connections are made, duration |
+| IP addresses | ✓ Visible | For audit logging (masked in logs) |
+| **Payload data** | **Opaque relay** | Base64-encoded, not inspected |
+
+### Payload Handling
+
+When Agent A exposes a service and Agent B reaches it, data flows through the Hub as an **opaque relay**:
+
+<Steps>
+  <Step title="Agent B sends data">
+    Data is base64-encoded into packets by Agent B
+  </Step>
+  
+  <Step title="Hub relays packets">
+    Hub forwards packets to Agent A **without inspection**
+  </Step>
+  
+  <Step title="Agent A decodes data">
+    Agent A decodes packets and forwards to the target service
+  </Step>
+  
+  <Step title="Responses flow back">
+    Responses follow the same path in reverse
+  </Step>
+</Steps>
+
+<Warning>
+  The Hub does NOT:
+  - Decrypt or inspect payload contents
+  - Store payload data
+  - Log payload contents
+</Warning>
+
+### Example: Database Queries
+
+**Question:** Does the Hub see my database queries?
+
+**Answer:** No. The Hub sees that Agent A connected to Agent B for service "prod-db", but the actual SQL queries and responses are opaque base64 packets that the Hub relays without inspection.
+
+---
+
+## Encryption
+
+### In Transit
+
+| Connection | Encryption | Notes |
+|------------|------------|-------|
+| Agent ↔ Hub | TLS 1.2+ | Required for non-localhost |
+| Hub ↔ Database | TLS | When using managed PostgreSQL |
+| Web UI ↔ API | HTTPS | Always enforced |
+
+<Note>
+  HTTPS enforcement can be bypassed for local development only:
+  ```bash
+  CONNECT_ALLOW_INSECURE=true connect up --hub http://localhost:3001
+  ```
+</Note>
+
+### At Rest
+
+- **Database**: Encryption depends on your PostgreSQL provider
+- **Hosted version**: Uses Railway's managed PostgreSQL with encryption at rest
+- **Self-hosted**: Configure your database provider's encryption settings
+
+### End-to-End Encryption (Future)
+
+Currently, payload data passes through the Hub as an opaque relay. For environments requiring zero-knowledge relay, we're considering optional agent-to-agent encryption where:
+
+- Agents negotiate keys directly
+- Hub relays encrypted packets it cannot read
+- Perfect forward secrecy via ephemeral keys
+
+<Tip>
+  Interested in E2E encryption? Join the discussion on [GitHub](https://github.com/treadiehq/private-connect/issues).
+</Tip>
+
+---
+
+## Workspace Isolation
+
+Every resource belongs to exactly one **workspace**. Multiple layers enforce isolation:
+
+### Isolation Layers
+
+<Accordion title="1. Database-level (RLS)">
+  PostgreSQL Row Level Security (RLS) enforces workspace isolation at the database layer. All workspace-scoped tables have RLS policies that only allow access to rows matching the current workspace context.
+  
+  **Example policy:**
+  ```sql
+  CREATE POLICY workspace_isolation ON services
+    FOR ALL USING (workspace_id = current_setting('app.workspace_id')::uuid);
+  ```
+</Accordion>
+
+<Accordion title="2. Application-level">
+  All queries are additionally scoped by `workspaceId` in the application code (defense-in-depth).
+  
+  ```typescript
+  // Always include workspaceId filter
+  const services = await db.services.findMany({
+    where: { workspaceId: user.workspaceId }
+  });
+  ```
+</Accordion>
+
+<Accordion title="3. API-level">
+  Guards validate workspace ownership before any operation.
+  
+  ```typescript
+  @UseGuards(WorkspaceGuard)
+  async getService(serviceId: string) {
+    // Guard ensures service belongs to user's workspace
+  }
+  ```
+</Accordion>
+
+<Accordion title="4. Realtime-level">
+  WebSocket rooms are isolated by workspace.
+  
+  ```typescript
+  // Clients only join their workspace room
+  socket.join(`workspace:${workspaceId}`);
+  ```
+</Accordion>
+
+<Accordion title="5. Agent-level">
+  Agents can only discover and access services within their workspace.
+  
+  ```bash
+  # Agent in workspace A
+  connect reach prod-db          # ✓ Works (same workspace)
+  
+  # Agent in workspace B  
+  connect reach prod-db          # ❌ "Service not found"
+  ```
+</Accordion>
+
+### Who Can Access My Services?
+
+**Only authenticated members of your workspace.** By default, exposed services are completely private.
+
+```bash
+# On your server (workspace: acme-corp)
+connect up
+connect expose localhost:5432 --name prod-db
+
+# On your laptop (same workspace: acme-corp)  
+connect up
+connect reach prod-db          # ✓ Works
+
+# Random person (different workspace)
+connect reach prod-db          # ❌ "Service not found"
+```
+
+Outsiders cannot:
+- Discover that your services exist
+- List services in your workspace
+- Connect to any of your services
+
+<Info>
+  The workspace IS the access boundary — think of it like a private Tailnet in Tailscale.
+</Info>
+
+---
+
+## Cross-Workspace Access
+
+Services can be shared across workspace boundaries via opt-in mechanisms:
+
+### Service Shares
+
+Token-based access with permissions:
+
+```bash
+connect share --expires 7d --name "acme-contractor"
+# → Share code: p4r7n3r
+```
+
+**Features:**
+- Time-limited access
+- Instant revocation
+- Audit logging
+- Per-service permissions
+
+### Public Links
+
+Time-limited URLs with configurable restrictions:
+
+```bash
+connect link api --expires 30d --methods GET --paths /api/v1 --rate-limit 100
+# → https://abc123xyz.privateconnect.co
+```
+
+**Safety controls:**
+- Read-only access (`--methods GET`)
+- Specific paths only (`--paths /api/public,/health`)
+- Rate limiting (`--rate-limit 100`)
+- Automatic expiration (`--expires 7d`)
+- Instant revocation (via web dashboard or API)
+
+<Warning>
+  Both methods create audit logs. Services remain private unless explicitly shared.
+</Warning>
+
+---
+
+## Authentication & Authorization
+
+### User Authentication
+
+- **Passwordless**: Magic links sent via email
+- **Sessions**: HTTP-only cookies with secure flags
+- **Expiry**: Sessions expire after 30 days of inactivity
+
+### Agent Authentication
+
+- **Tokens**: 256-bit random tokens, stored as SHA-256 hashes
+- **Expiry**: Tokens expire after 30 days (configurable)
+- **Rotation**: `connect up --rotate-token` to rotate before expiry
+- **Audit**: All token usage logged with IP, user-agent, and client type
+
+#### Provisioned Tokens (for AI agents)
+
+AI agent runtimes can request short-lived tokens via `POST /v1/agents/provision`:
+
+- **Default TTL**: 2 hours (configurable: 5 min to 24 hours)
+- **Client identity**: Each token is tagged with a `clientType` (`cursor`, `claude-code`, `codex`, `devin`, `github-actions`, `cli`, `sdk`, `other`)
+- **Auto-generated credentials**: The API generates both `agentId` and `token` — callers cannot reuse or supply their own
+- **Audit trail**: A `PROVISIONED` event is logged at creation, and all subsequent token usage carries the `clientType` for attribution
+
+### API Key Authentication
+
+- **Format**: `pc_` prefix + 32 random characters
+- **Scope**: Full workspace access
+- **Revocation**: Instant via web UI or API
+
+---
+
+## Audit Logging
+
+Complete audit trail of all agent actions and access.
+
+### What's Logged
+
+| Event | Data Captured |
+|-------|---------------|
+| Agent connect/disconnect | Agent ID, client type, IP (masked), timestamp |
+| Token provisioned | Agent ID, client type, TTL, timestamp |
+| Token usage | Agent ID, client type, IP, user-agent |
+| Token rotation | Agent ID, client type, new expiry |
+| IP changes | Previous IP, new IP, timestamp |
+| Service expose/unexpose | Service name, target, agent |
+| Share creation/revocation | Share ID, creator, permissions |
+| Share access | IP, path, method, status code |
+
+### Log Security
+
+- Sensitive data (tokens, keys) is scrubbed before logging
+- IP addresses are masked in logs (`192.168.x.x`)
+- Logs are structured JSON for SIEM ingestion
+
+### Accessing Audit Logs
+
+```bash
+# View agent action audit log
+connect audit
+
+# With filters
+connect audit --limit 100 --type file --action block
+
+# View statistics
+connect audit --stats
+```
+
+**Example output:**
+```
+RECENT AGENT ACTIONS
+
+Timestamp            Type     Action  Target                    Reason
+2026-03-02 14:23:01  file     allow   src/index.ts             -
+2026-03-02 14:23:15  file     review  .github/workflows/ci.yml User approved
+2026-03-02 14:23:30  command  block   rm -rf *                 Destructive command
+2026-03-02 14:24:01  file     allow   src/utils.ts             -
+```
+
+---
+
+## Token Security
+
+Tokens are the primary authentication mechanism for agents.
+
+### Security Features
+
+<AccordionGroup>
+  <Accordion title="30-day expiry with warnings">
+    - Tokens expire after 30 days
+    - 7-day warning before expiration
+    - 24-hour grace period for rotation
+    
+    ```bash
+    # Rotate before expiry
+    connect up --rotate-token
+    ```
+  </Accordion>
+  
+  <Accordion title="SHA-256 hashing">
+    - Tokens are hashed using SHA-256 before storage
+    - Original tokens never stored in database
+    - Impossible to retrieve original token from database
+  </Accordion>
+  
+  <Accordion title="IP change notifications">
+    - Alerts when agent IP changes
+    - Helps detect token theft
+    - Logged in audit trail
+  </Accordion>
+  
+  <Accordion title="Automatic rejection">
+    - Expired tokens are automatically rejected
+    - No grace period after expiration
+    - Forces rotation for continued access
+  </Accordion>
+</AccordionGroup>
+
+### Log Scrubbing
+
+Production logs automatically redact:
+- API keys (`pc_...`)
+- Agent tokens (64 hex characters)
+- Bearer tokens
+- Session cookies
+
+**Example:**
+```
+# Before scrubbing
+Agent authenticated with token: abc123def456...
+
+# After scrubbing
+Agent authenticated with token: [REDACTED]
+```
+
+---
+
+## Rate Limiting
+
+- Service shares support per-minute rate limits
+- API endpoints should be rate-limited at the load balancer level
+- Public links can enforce rate limits per client IP
+
+```bash
+# Create share with rate limit
+connect share --rate-limit 100
+
+# Create public link with rate limit
+connect link api --rate-limit 60
+```
+
+---
+
+## Threat Model
+
+### Trusted
+
+- The Hub operator (you, if self-hosted; us, if using hosted version)
+- Workspace members with API keys
+- Agents with valid tokens
+
+### Untrusted
+
+- Network between agents and Hub (mitigated by TLS)
+- Other workspaces (isolated by design)
+- External share recipients (limited by share permissions)
+
+### Not Protected Against
+
+<Warning>
+  **Malicious workspace owner**
+  
+  Workspace owners control their workspace and can:
+  - Access all services in the workspace
+  - Create API keys with full access
+  - View all agent activity
+  - Share services externally
+  
+  Mitigation: Use separate workspaces for different trust boundaries.
+</Warning>
+
+<Warning>
+  **Compromised agent machine**
+  
+  If an agent machine is compromised, attackers have:
+  - Full access to services exposed by that agent
+  - Ability to reach other services in the workspace
+  - Access to the agent token for that machine
+  
+  Mitigation: Rotate tokens immediately, revoke access from the web UI.
+</Warning>
+
+<Warning>
+  **Hub operator with database access**
+  
+  Hub operators (or attackers with database access) can:
+  - See metadata (service names, connection times, IPs)
+  - Not see payload data (it's not stored)
+  - Not decrypt agent tokens (they're hashed)
+  
+  Mitigation: Self-host for full control, or trust the hosted provider.
+</Warning>
+
+---
+
+## Self-Hosting Security
+
+When self-hosting, you control the entire security posture.
+
+### Production Checklist
+
+<Steps>
+  <Step title="Enable TLS">
+    TLS is required for non-localhost connections.
+    
+    ```bash
+    # Use a reverse proxy (nginx, Caddy) for TLS termination
+    # Or configure the Hub with TLS certificates directly
+    ```
+  </Step>
+  
+  <Step title="Use Managed PostgreSQL">
+    - Enable encryption at rest
+    - Configure automated backups
+    - Use strong passwords
+    - Enable connection pooling
+  </Step>
+  
+  <Step title="Set Up Monitoring">
+    - Health checks for Hub availability
+    - Alerts for high error rates
+    - Database connection monitoring
+    - Disk space monitoring
+  </Step>
+  
+  <Step title="Configure Token Settings">
+    - Review and customize token expiry settings
+    - Set up token rotation policies
+    - Enable IP change notifications
+  </Step>
+  
+  <Step title="Configure Rate Limiting">
+    - Add rate limiting at load balancer level
+    - Protect against DDoS attacks
+    - Limit requests per IP/token
+  </Step>
+</Steps>
+
+### Environment Variables
+
+```bash
+# Security-related environment variables
+DATABASE_URL=postgresql://...           # Use managed PostgreSQL
+JWT_SECRET=<long-random-string>         # For session signing
+ENCRYPTION_KEY=<32-byte-hex>           # For sensitive data encryption
+ALLOW_INSECURE=false                    # Enforce HTTPS
+TOKEN_EXPIRY_DAYS=30                    # Token expiration
+```
+
+---
+
+## Compliance
+
+### Current State
+
+Private Connect is designed with security in mind but does not currently hold compliance certifications.
+
+### Self-Hosted Compliance
+
+When self-hosting, you control:
+- Data residency and jurisdiction
+- Encryption configuration
+- Access controls and audit policies
+- Backup and retention policies
+
+This allows you to meet your organization's compliance requirements (SOC 2, HIPAA, GDPR, etc.) through your own policies.
+
+### Roadmap
+
+We're evaluating:
+- SOC 2 Type II certification for the hosted version
+- GDPR compliance documentation
+- Security questionnaire / CAIQ responses
+
+---
+
+## Data Residency
+
+### Hosted Version
+
+For the hosted version at `api.privateconnect.co`:
+- All data resides in US (Oregon) region
+- No data replication to other regions
+- No cross-border data transfer
+
+### Self-Hosted
+
+Deploy in any region:
+- Full control over data location
+- Meet regional compliance requirements
+- Air-gapped environments supported
+
+---
+
+## Reporting Security Issues
+
+Please report security vulnerabilities responsibly:
+
+<CardGroup cols={2}>
+  <Card title="Email" icon="envelope">
+    security@privateconnect.co
+  </Card>
+  <Card title="Discord" icon="discord">
+    DM a maintainer in our [Discord server](https://discord.gg/KqdBcqRk5E)
+  </Card>
+</CardGroup>
+
+**Response timeline:**
+- Acknowledgment within 48 hours
+- Fix timeline provided within 7 days
+- Public disclosure coordinated with reporter
+
+---
+
+## Security Features Summary
+
+| Feature | Benefit |
+|---------|----------|
+| **No VPN** | No client to install, no split tunneling issues |
+| **No firewall rules** | Services stay private, outbound-only connections |
+| **No exposed ports** | Nothing listens publicly |
+| **Time-limited shares** | Access expires automatically |
+| **Instant revocation** | Cut off access in one command |
+| **Audit trail** | See who accessed what, when |
+| **Per-service access** | Grant access to specific services, not the whole network |
+| **Workspace isolation** | Multi-layer isolation guarantees |
+| **Token rotation** | Regularly rotate credentials without downtime |
+| **Opaque relay** | Hub doesn't see your data |
+
+---
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Does the Hub see my database queries?">
+    No. The Hub sees that Agent A connected to Agent B for service "prod-db", but the actual SQL queries and responses are opaque base64 packets that the Hub relays without inspection.
+  </Accordion>
+  
+  <Accordion title="Can other workspaces see my services?">
+    No. Services are isolated to their workspace. Other workspaces cannot discover or connect to your services unless you explicitly share them.
+  </Accordion>
+  
+  <Accordion title="What happens if the Hub goes down?">
+    Existing TCP connections through the Hub will fail. Agents will attempt to reconnect with exponential backoff. No data is lost—the Hub doesn't store payload data.
+  </Accordion>
+  
+  <Accordion title="Can I run multiple Hubs?">
+    Currently, agents connect to a single Hub. Multi-region Hub federation is on the roadmap for high availability deployments.
+  </Accordion>
+  
+  <Accordion title="Is the agent open source?">
+    Yes. The entire stack (agent, API, web UI) is open source under FSL-1.1-MIT license. View the code on [GitHub](https://github.com/treadiehq/private-connect).
+  </Accordion>
+</AccordionGroup>

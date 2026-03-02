@@ -1,0 +1,467 @@
+---
+title: connect proxy
+description: HTTP/HTTPS proxy server with subdomain routing
+---
+
+The `connect proxy` command starts a local HTTP/HTTPS proxy that routes requests to services based on subdomain, enabling access via URLs like `http://postgres.localhost:3456`.
+
+## Usage
+
+```bash
+connect proxy [action] [options]
+```
+
+## Actions
+
+<ParamField path="start" default>
+  Start the proxy server (default action)
+</ParamField>
+
+<ParamField path="stop">
+  Stop the running proxy server
+</ParamField>
+
+<ParamField path="status">
+  Show proxy status and active routes
+</ParamField>
+
+<ParamField path="trust">
+  Trust the local CA certificate for HTTPS
+</ParamField>
+
+## Options
+
+<ParamField path="--port" type="number" default={3456}>
+  Port to listen on
+</ParamField>
+
+<ParamField path="--https" type="boolean" default={false}>
+  Enable HTTPS with auto-generated certificates
+</ParamField>
+
+<ParamField path="--cert" type="string">
+  Path to custom TLS certificate
+</ParamField>
+
+<ParamField path="--key" type="string">
+  Path to custom TLS private key
+</ParamField>
+
+<ParamField path="--trust" type="boolean" default={false}>
+  Automatically trust the CA certificate
+</ParamField>
+
+<ParamField path="--replace" type="boolean" default={false}>
+  Kill existing process on the port and take over
+</ParamField>
+
+<ParamField path="--foreground" type="boolean" default={false}>
+  Run in foreground (for debugging)
+</ParamField>
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+## Examples
+
+### Start HTTP Proxy
+
+```bash
+connect proxy start
+```
+
+Output:
+```
+🌐 Starting proxy...
+
+[ok] HTTP proxy started on port 3456
+  Logs: ~/.privateconnect/proxy.log
+  Stop: connect proxy stop
+```
+
+### Start HTTPS Proxy
+
+```bash
+connect proxy start --https
+```
+
+Output:
+```
+🌐 Starting subdomain proxy...
+
+  Hub:  https://hub.privateconnect.co
+  Port: 3456
+  TLS:  auto-generating certificates...
+
+  [ok] Generated local CA
+  [ok] Generated server certificate
+  [!] Adding CA to system trust store...
+  [ok] CA trusted — no browser warnings
+
+[ok] Found 3 route(s):
+  • postgres → 127.0.0.1:5432 [reach]
+  • redis → 127.0.0.1:6379 [reach]
+  • api → 127.0.0.1:8080 [hub]
+
+[ok] HTTPS proxy running on port 3456
+
+  Access your services via subdomains:
+
+    https://postgres.localhost:3456
+    https://redis.localhost:3456
+    https://api.localhost:3456
+
+  Press Ctrl+C to stop
+```
+
+### Custom Port
+
+```bash
+connect proxy start --port 8080
+```
+
+### Custom TLS Certificates
+
+```bash
+connect proxy start --https --cert ./cert.pem --key ./key.pem
+```
+
+### Stop Proxy
+
+```bash
+connect proxy stop
+```
+
+Output:
+```
+[ok] Proxy stopped.
+```
+
+### Check Status
+
+```bash
+connect proxy status
+```
+
+Output:
+```
+🌐 Proxy Status
+
+  ● Proxy: running (PID 12345)
+    Port: 3456
+    TLS:  enabled
+    Routes:
+      https://postgres.localhost:3456
+      https://redis.localhost:3456
+      https://api.localhost:3456
+```
+
+### Trust CA Certificate
+
+```bash
+connect proxy trust
+```
+
+Output:
+```
+🔒 Trusting Private Connect local CA...
+
+  [ok] CA added to system trust store
+  Browsers will now trust Private Connect HTTPS certificates.
+```
+
+## Behavior
+
+### Subdomain Routing
+
+The proxy routes requests based on the subdomain in the `Host` header:
+
+```
+http://postgres.localhost:3456 → localhost:5432
+http://api.localhost:3456      → localhost:8080
+http://redis.localhost:3456    → localhost:6379
+```
+
+**Routing logic:**
+1. Extract subdomain from `Host` header
+2. Look up service in route table
+3. Proxy request to service's local port
+4. Return response to client
+
+### Route Discovery
+
+The proxy discovers services from two sources:
+
+**Hub Services:**
+- Services exposed by other agents
+- Fetched from hub API every 10 seconds
+- Requires active tunnel port
+
+**Local Routes:**
+- Services reached via `connect reach`
+- Read from `~/.privateconnect/active-routes.json`
+- Updated in real-time via file watching
+
+### Daemon Mode
+
+By default, the proxy runs as a background daemon:
+
+```bash
+connect proxy start
+# Returns immediately, proxy runs in background
+```
+
+Logs are written to `~/.privateconnect/proxy.log`.
+
+### Foreground Mode
+
+For debugging:
+
+```bash
+connect proxy start --foreground
+```
+
+Logs appear in terminal, proxy stops when you Ctrl+C.
+
+### Auto-Start
+
+The proxy is automatically started by `connect reach` if not already running:
+
+```bash
+connect reach postgres
+# Proxy auto-starts if needed
+# Shows: http://postgres.localhost:3456 (proxy auto-started on port 3456)
+```
+
+### HTTPS Certificates
+
+When using `--https`, the proxy:
+
+1. **Generates CA** (if not exists): `~/.privateconnect/certs/ca.crt`
+2. **Generates server cert**: `~/.privateconnect/certs/server.crt`
+3. **Trusts CA**: Adds to system keychain (macOS) or certificate store (Linux)
+
+This enables HTTPS without browser warnings.
+
+### WebSocket Support
+
+The proxy supports WebSocket upgrades:
+
+```bash
+# Client connects:
+ws://api.localhost:3456/socket
+
+# Proxy upgrades and forwards to:
+ws://localhost:8080/socket
+```
+
+Bidirectional communication is maintained.
+
+### HTTP CONNECT
+
+For HTTPS proxying through HTTP proxy:
+
+```bash
+curl -x http://localhost:3456 https://api.example.com
+```
+
+The proxy handles CONNECT tunneling.
+
+## Error Handling
+
+### Service Not Found
+
+```bash
+curl http://unknown.localhost:3456
+```
+
+Response:
+```json
+{
+  "error": "Service not found",
+  "subdomain": "unknown",
+  "available": ["postgres", "redis", "api"],
+  "hint": "Try: http://postgres.localhost:3456"
+}
+```
+
+### Service Unreachable
+
+```bash
+curl http://postgres.localhost:3456
+```
+
+Response (if postgres is down):
+```json
+{
+  "error": "Bad Gateway: the service is not responding.",
+  "service": "postgres"
+}
+```
+
+### Port Already in Use
+
+```bash
+connect proxy start --port 3456
+```
+
+Output:
+```
+[x] Port 3456 is already in use
+  Try: connect proxy start --port 3457
+```
+
+Or use `--replace` to take over:
+```bash
+connect proxy start --port 3456 --replace
+```
+
+## State Management
+
+Proxy state is tracked in `~/.privateconnect/proxy-state.json`:
+
+```json
+{
+  "pid": 12345,
+  "port": 3456,
+  "tls": true,
+  "startedAt": "2024-01-15T10:30:00.000Z"
+}
+```
+
+This allows:
+- Detection if proxy is already running
+- Port discovery for auto-start
+- Process management
+
+## Exit Codes
+
+- `0` - Proxy started/stopped successfully
+- `1` - Port conflict, network error, or certificate error
+
+## Platform Support
+
+### macOS
+
+- Full support for HTTPS certificate trust
+- Uses system keychain
+- DNS resolution for `.localhost` works natively
+
+### Linux
+
+- HTTPS certificate trust via `update-ca-certificates`
+- May require `sudo` for trust operation
+- `.localhost` DNS resolution may need `/etc/hosts` or dnsmasq
+
+### Windows
+
+- HTTPS certificate trust via certificate store
+- May require admin privileges
+- `.localhost` DNS resolution via `hosts` file
+
+## Use Cases
+
+### Browser-Based Access
+
+Access databases through web UIs:
+
+```bash
+connect reach postgres
+connect proxy start
+open http://postgres.localhost:3456  # pgAdmin, etc.
+```
+
+### Webhook Testing
+
+Test webhooks locally with readable URLs:
+
+```bash
+connect expose localhost:3000 --name api
+connect proxy start --https
+# Configure webhook: https://api.localhost:3456/webhook
+```
+
+### Service Discovery
+
+Explore available services:
+
+```bash
+connect proxy status
+# Lists all accessible services
+```
+
+### Multi-Service Development
+
+Access entire stack via URLs:
+
+```bash
+connect dev  # Connects to multiple services
+connect proxy start
+curl http://api.localhost:3456
+curl http://auth.localhost:3456
+curl http://payments.localhost:3456
+```
+
+## Related Commands
+
+- [`connect reach`](/cli/reach) - Create routes for proxy
+- [`connect expose`](/cli/expose) - Expose services accessible via proxy
+- [`connect dev`](/cli/dev) - Multi-service setup with proxy integration
+
+## Troubleshooting
+
+### Certificate Warnings
+
+If you see browser warnings:
+
+```bash
+connect proxy trust
+```
+
+Or manually trust: `~/.privateconnect/certs/ca.crt`
+
+### DNS Not Resolving
+
+If `postgres.localhost` doesn't resolve:
+
+**macOS:**
+- Should work natively
+- Check: `ping postgres.localhost`
+
+**Linux:**
+```bash
+echo "127.0.0.1 postgres.localhost" | sudo tee -a /etc/hosts
+```
+
+**Windows:**
+```powershell
+Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 postgres.localhost"
+```
+
+### Proxy Not Auto-Starting
+
+If `connect reach` doesn't auto-start proxy:
+
+```bash
+connect proxy start
+# Then retry:
+connect reach postgres
+```
+
+### Logs
+
+View proxy logs:
+```bash
+tail -f ~/.privateconnect/proxy.log
+```
+
+Or run in foreground:
+```bash
+connect proxy stop
+connect proxy start --foreground
+```

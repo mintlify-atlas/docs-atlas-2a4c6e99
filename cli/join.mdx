@@ -1,0 +1,250 @@
+---
+title: connect join
+description: Join a shared environment
+---
+
+The `connect join` command allows you to instantly access all services in a teammate's shared environment using a share code.
+
+## Usage
+
+```bash
+connect join <share-code> [options]
+```
+
+## Arguments
+
+<ParamField path="share-code" type="string" required>
+  The share code provided by your teammate (e.g., "abc123")
+</ParamField>
+
+## Options
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+## Examples
+
+### Join an Environment
+
+```bash
+connect join abc123
+```
+
+Output:
+```
+🔗 Joining environment share: abc123
+
+[ok] Connected to shared environment!
+
+  Name: staging-env
+  Expires in 22 hours
+
+  Establishing tunnels...
+
+    [ok] postgres → localhost:5432
+    [ok] redis → localhost:6379
+    [ok] api → localhost:8080
+
+[ok] 3 tunnel(s) active
+
+  Example connections:
+    • postgres: localhost:5432
+    • redis: localhost:6379
+    • api: localhost:8080
+
+  Press Ctrl+C to disconnect all tunnels
+```
+
+### Port Conflicts
+
+If a port is already in use, an alternative port is automatically selected:
+
+```bash
+connect join abc123
+```
+
+Output:
+```
+  Establishing tunnels...
+
+    [ok] postgres → localhost:15432 (was 5432)
+    [ok] redis → localhost:6379
+    [ok] api → localhost:8080
+```
+
+### Service Offline
+
+If a service in the share is offline:
+
+```bash
+connect join abc123
+```
+
+Output:
+```
+  Establishing tunnels...
+
+    [ok] postgres → localhost:5432
+    [!] redis → failed: Port 6379 in use
+    [ok] api → localhost:8080
+
+[ok] 2 tunnel(s) active
+
+  [!] 1 service(s) could not connect (may be offline)
+```
+
+## Behavior
+
+### Share Code Format
+
+Share codes are:
+- Case-insensitive
+- Alphanumeric (e.g., "abc123", "XYZ789")
+- Automatically normalized (lowercase, trimmed)
+
+### Tunnel Creation
+
+For each service in the share:
+1. Verifies service is online
+2. Finds available local port (preferring original port)
+3. Creates TCP tunnel from local port to service
+4. Registers in active routes for proxy
+
+### Connection Lifecycle
+
+**On Join:**
+- Fetches share metadata from hub
+- Validates share is not expired
+- Increments join counter
+- Creates tunnels for all available services
+
+**While Running:**
+- Maintains active tunnels
+- Automatically reconnects on network interruption
+- Updates active routes file for proxy integration
+
+**On Disconnect (Ctrl+C):**
+- Closes all tunnel connections
+- Cleans up active routes
+- Exits gracefully
+
+### Port Selection Strategy
+
+1. **Original port**: Try the service's original port first
+2. **Alternative port**: If original is in use, find next available port
+3. **Sequential search**: Start from original + 1, increment until available
+
+## Exit Codes
+
+- `0` - Successfully joined and disconnected gracefully
+- `1` - Share not found, expired, or network error
+
+## Use Cases
+
+### Access Shared Development Environment
+
+```bash
+# Teammate shares:
+connect share --name "dev-env"
+# Share code: abc123
+
+# You join:
+connect join abc123
+
+# Now you can access:
+psql -h localhost -p 5432  # Their postgres
+redis-cli -p 6379          # Their redis
+curl http://localhost:8080 # Their API
+```
+
+### Debugging Together
+
+```bash
+# Join your teammate's environment to debug together:
+connect join xyz789
+
+# Access their running services:
+curl http://localhost:3000/api/debug
+tail -f /var/log/app.log
+```
+
+### Code Review
+
+```bash
+# Reviewer receives share code in PR:
+connect join pr1234
+
+# Test the feature branch:
+curl http://localhost:8080/api/new-feature
+```
+
+## Related Commands
+
+- [`connect share`](/cli/share) - Create a shareable environment
+- [`connect clone`](/cli/clone) - Alternative for cloning specific agents
+- [`connect reach`](/cli/reach) - Connect to individual services
+
+## Troubleshooting
+
+### Share Not Found
+
+```bash
+connect join abc123
+```
+
+Output:
+```
+[x] Share not found or expired
+  Check the code and try again.
+```
+
+Possible causes:
+- Invalid share code
+- Share has expired
+- Share was revoked
+- Typo in the code
+
+### No Services Available
+
+If all services in the share are offline:
+
+```
+[x] No tunnels could be established.
+```
+
+The share creator's agent may be:
+- Offline or disconnected
+- Not exposing services anymore
+- Behind a restrictive firewall
+
+### Port Conflicts
+
+If too many ports are in use:
+
+```
+[!] postgres → failed: Port 5432 in use and no alternatives available
+```
+
+Stop conflicting services:
+```bash
+lsof -ti:5432 | xargs kill
+connect join abc123
+```
+
+### Agent Not Configured
+
+```bash
+[x] Agent not configured
+  Run connect up first to authenticate.
+```
+
+Authenticate before joining:
+```bash
+connect up
+connect join abc123
+```

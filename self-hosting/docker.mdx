@@ -1,0 +1,415 @@
+---
+title: Docker Deployment
+description: Deploy Private Connect using Docker Compose
+---
+
+The fastest way to self-host Private Connect is using Docker Compose, which handles all dependencies and networking automatically.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install Docker">
+    Install Docker Engine and Docker Compose:
+    ```bash
+    # Ubuntu/Debian
+    curl -fsSL https://get.docker.com | sh
+    
+    # Verify installation
+    docker --version
+    docker compose version
+    ```
+  </Step>
+  
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/treadiehq/private-connect.git
+    cd private-connect
+    ```
+  </Step>
+</Steps>
+
+## Docker Compose Configuration
+
+The included `docker-compose.yml` defines three services:
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"   # Mapped to 5433 to avoid local Postgres conflicts
+    environment:
+      POSTGRES_USER: privateconnect
+      POSTGRES_PASSWORD: privateconnect
+      POSTGRES_DB: privateconnect
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U privateconnect"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+      - "23000-23100:23000-23100"  # Tunnel ports range
+    environment:
+      - DATABASE_URL=postgresql://privateconnect:privateconnect@postgres:5432/privateconnect
+      - PORT=3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NUXT_PUBLIC_API_URL=http://localhost:3001
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+```
+
+## Deployment Steps
+
+<Steps>
+  <Step title="Configure environment variables">
+    Create a `.env` file in the project root to customize settings:
+    
+    ```bash
+    # Database credentials
+    POSTGRES_USER=privateconnect
+    POSTGRES_PASSWORD=your_secure_password_here
+    POSTGRES_DB=privateconnect
+    
+    # API configuration
+    NODE_ENV=production
+    PORT=3001
+    
+    # Email authentication (optional)
+    RESEND_API_KEY=re_xxxxxxxxxxxx
+    EMAIL_FROM="Private Connect <noreply@yourdomain.com>"
+    APP_URL="https://yourdomain.com"
+    
+    # Web UI API endpoint
+    NUXT_PUBLIC_API_URL=http://localhost:3001
+    ```
+    
+    <Warning>
+      Change the default PostgreSQL password in production!
+    </Warning>
+  </Step>
+  
+  <Step title="Start the services">
+    Build and start all containers:
+    
+    ```bash
+    docker compose up --build -d
+    ```
+    
+    This will:
+    - Pull the PostgreSQL 16 Alpine image
+    - Build the API container from `apps/api/Dockerfile`
+    - Build the Web UI container from `apps/web/Dockerfile`
+    - Create a persistent volume for PostgreSQL data
+    - Start all services with proper health checks
+  </Step>
+  
+  <Step title="Run database migrations">
+    Initialize the database schema:
+    
+    ```bash
+    docker compose exec api pnpm db:push
+    ```
+    
+    This runs Prisma migrations to set up all tables, indexes, and relations.
+  </Step>
+  
+  <Step title="Verify deployment">
+    Check that all services are running:
+    
+    ```bash
+    docker compose ps
+    ```
+    
+    You should see:
+    ```
+    NAME                STATUS              PORTS
+    postgres            Up (healthy)        0.0.0.0:5433->5432/tcp
+    api                 Up (healthy)        0.0.0.0:3001->3001/tcp, 0.0.0.0:23000-23100->23000-23100/tcp
+    web                 Up                  0.0.0.0:3000->3000/tcp
+    ```
+  </Step>
+  
+  <Step title="Access the dashboard">
+    Open your browser and navigate to:
+    
+    ```
+    http://localhost:3000
+    ```
+    
+    The API is available at:
+    ```
+    http://localhost:3001
+    ```
+  </Step>
+</Steps>
+
+## Port Mappings
+
+| Host Port | Container Port | Service | Purpose |
+|-----------|----------------|---------|----------|
+| `5433` | `5432` | PostgreSQL | Database (mapped to 5433 to avoid conflicts) |
+| `3001` | `3001` | API Hub | Agent connections & REST API |
+| `23000-23100` | `23000-23100` | API Hub | Tunnel port range (101 concurrent tunnels) |
+| `3000` | `3000` | Web UI | Dashboard interface |
+
+<Note>
+  PostgreSQL is mapped to host port `5433` instead of `5432` to avoid conflicts with a locally-running PostgreSQL instance.
+</Note>
+
+## Managing the Deployment
+
+### View Logs
+
+Follow logs from all services:
+```bash
+docker compose logs -f
+```
+
+View logs for a specific service:
+```bash
+docker compose logs -f api
+docker compose logs -f web
+docker compose logs -f postgres
+```
+
+### Stop Services
+
+```bash
+docker compose down
+```
+
+Stop and remove volumes (deletes all data):
+```bash
+docker compose down -v
+```
+
+### Restart Services
+
+```bash
+docker compose restart
+```
+
+Restart a specific service:
+```bash
+docker compose restart api
+```
+
+### Rebuild Containers
+
+After code changes, rebuild without cache:
+```bash
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+Or use the npm script:
+```bash
+pnpm docker:rebuild
+```
+
+## Database Management
+
+### Access Database Shell
+
+```bash
+docker compose exec postgres psql -U privateconnect -d privateconnect
+```
+
+### Backup Database
+
+```bash
+docker compose exec postgres pg_dump -U privateconnect privateconnect > backup.sql
+```
+
+### Restore Database
+
+```bash
+cat backup.sql | docker compose exec -T postgres psql -U privateconnect -d privateconnect
+```
+
+### Open Prisma Studio
+
+Inspect and edit database records with a GUI:
+```bash
+docker compose exec api pnpm db:studio
+```
+
+Access at `http://localhost:5555`
+
+## Health Checks
+
+The Docker Compose configuration includes health checks:
+
+### PostgreSQL Health Check
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U privateconnect"]
+  interval: 5s
+  timeout: 5s
+  retries: 5
+```
+
+### API Health Check
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:3001/v1/agents"]
+  interval: 10s
+  timeout: 5s
+  retries: 3
+```
+
+The API service waits for PostgreSQL to be healthy before starting.
+
+## Production Considerations
+
+<Steps>
+  <Step title="Use a reverse proxy">
+    Set up nginx or Caddy for HTTPS:
+    
+    ```nginx
+    server {
+      listen 80;
+      server_name privateconnect.yourdomain.com;
+      return 301 https://$host$request_uri;
+    }
+    
+    server {
+      listen 443 ssl http2;
+      server_name privateconnect.yourdomain.com;
+      
+      ssl_certificate /etc/ssl/certs/privateconnect.crt;
+      ssl_certificate_key /etc/ssl/private/privateconnect.key;
+      
+      location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+      }
+      
+      location /api/ {
+        proxy_pass http://localhost:3001/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Secure PostgreSQL">
+    Use strong passwords and avoid exposing port 5433 publicly:
+    
+    ```yaml
+    postgres:
+      ports:
+        - "127.0.0.1:5433:5432"  # Only accessible from localhost
+    ```
+  </Step>
+  
+  <Step title="Configure persistent storage">
+    Use named volumes or bind mounts for data persistence:
+    
+    ```yaml
+    volumes:
+      postgres-data:
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: /var/lib/private-connect/postgres
+    ```
+  </Step>
+  
+  <Step title="Set resource limits">
+    Prevent containers from consuming all system resources:
+    
+    ```yaml
+    api:
+      deploy:
+        resources:
+          limits:
+            cpus: '2.0'
+            memory: 2G
+          reservations:
+            cpus: '1.0'
+            memory: 1G
+    ```
+  </Step>
+  
+  <Step title="Enable container restart policies">
+    Ensure services restart after failures:
+    
+    ```yaml
+    api:
+      restart: unless-stopped
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Containers won't start
+
+Check logs for errors:
+```bash
+docker compose logs
+```
+
+### Database connection errors
+
+Verify PostgreSQL is healthy:
+```bash
+docker compose ps postgres
+docker compose exec postgres pg_isready -U privateconnect
+```
+
+### Port conflicts
+
+If port 3000, 3001, or 5433 is already in use, modify `docker-compose.yml`:
+```yaml
+ports:
+  - "8000:3000"  # Use port 8000 instead of 3000
+```
+
+### Reset everything
+
+Completely reset the deployment:
+```bash
+docker compose down -v
+docker compose up --build -d
+docker compose exec api pnpm db:push
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Connect Agents" icon="link" href="/quickstart">
+    Connect your first agent to the self-hosted hub
+  </Card>
+  <Card title="Build from Source" icon="code" href="/self-hosting/source">
+    Advanced: Build and run components manually
+  </Card>
+</CardGroup>

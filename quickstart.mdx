@@ -1,80 +1,353 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get from install to first working tunnel in under 2 minutes
 ---
 
-## Get started in three steps
+This guide gets you from zero to a working tunnel in under 2 minutes. You'll expose a service from one machine and access it from another.
 
-Get your documentation site running locally and make your first customization.
+## Install Private Connect
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Install the CLI">
+    Run the install script on both machines:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    <CodeGroup>
+      ```bash macOS / Linux
+      curl -fsSL https://privateconnect.co/install.sh | bash
+      ```
 
-### Step 2: Deploy your changes
+      ```bash Windows (WSL)
+      curl -fsSL https://privateconnect.co/install.sh | bash
+      ```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+      ```bash From Source
+      git clone https://github.com/treadiehq/private-connect.git
+      cd private-connect && pnpm install
+      ./scripts/start.sh dev
+      ```
+    </CodeGroup>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Authenticate">
+    Run this on both machines:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    connect up
+    ```
 
-### Step 3: Go live
+    This opens your browser for login. On headless servers, it shows a code to enter from any device.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    **For CI/CD or headless servers:**
 
-## Next steps
+    ```bash
+    connect up --api-key pc_xxx --label prod-server
+    ```
 
-Now that you have your docs running, explore these key features:
+    Or use an environment variable:
+
+    ```bash
+    export PRIVATECONNECT_TOKEN=pc_xxx
+    connect up --label prod-server
+    ```
+  </Step>
+
+  <Step title="Expose a Service">
+    On the machine with the service you want to expose (e.g., your local database):
+
+    ```bash
+    connect expose localhost:5432 --name my-db
+    ```
+
+    You'll see output like:
+
+    ```
+    ✓ Service exposed: my-db
+    ✓ Target: localhost:5432
+    ✓ Ready to receive connections
+    ```
+
+    **Common services with auto-naming:**
+
+    <CodeGroup>
+      ```bash PostgreSQL
+      connect localhost:5432
+      # Auto-named "postgres"
+      ```
+
+      ```bash Redis
+      connect localhost:6379
+      # Auto-named "redis"
+      ```
+
+      ```bash HTTP Service
+      connect localhost:3000 --name api
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Access the Service">
+    On your other machine (laptop, cloud IDE, etc.):
+
+    ```bash
+    connect reach my-db
+    ```
+
+    You'll see diagnostics and connection confirmation:
+
+    ```
+    🔍 Reaching "my-db"...
+
+      ✓ REACHABLE
+
+      ┌─────────────────────────────────────────┐
+      │  DNS     ✓  OK                          │
+      │  TCP     ✓  OK                          │
+      │  TLS     ✓  OK                          │
+      │  HTTP    ✓  200 OK                      │
+      │  Latency    45ms                        │
+      └─────────────────────────────────────────┘
+
+      ✓ Connected to my-db on localhost:5432
+    ```
+
+    **The service is now available at `localhost:5432`** on this machine. Use it with any client:
+
+    <CodeGroup>
+      ```bash PostgreSQL
+      psql -h localhost -p 5432 -U postgres
+      ```
+
+      ```bash Connection String
+      postgres://localhost:5432/myapp
+      ```
+
+      ```bash .env file
+      DATABASE_URL=postgres://localhost:5432/myapp
+      ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+## That's It!
+
+You've just created your first secure tunnel. The service on machine A is now accessible from machine B at `localhost:5432`. No VPN, no firewall rules, no configuration changes.
+
+## Quick Test (No Authentication)
+
+Want to try it without signing up? Use temporary tunnels:
+
+<CodeGroup>
+  ```bash Quick Tunnel
+  npx private-connect tunnel 3000
+  # Creates a temporary public URL (2hr expiry)
+  # Perfect for demos and quick testing
+  ```
+
+  ```bash Share Multiple Services
+  npx private-connect up 3000 5432 6379
+  # → npx private-connect join k7m2p9
+  # Share this command with your teammate
+  ```
+
+  ```bash Test Connectivity
+  npx private-connect test vault.internal:8200
+  # Checks TCP, TLS, HTTP, latency
+  # No signup required
+  ```
+</CodeGroup>
+
+## Common First Tasks
+
+### Share Your Environment with a Teammate
+
+Once you have services exposed, share them instantly:
+
+```bash
+connect share
+# → Share code: x7k9m2
+
+# Teammate runs:
+connect join x7k9m2
+# → Same services, same ports
+```
+
+### Clone a Teammate's Setup
+
+Join your team and clone an existing environment:
+
+```bash
+connect clone --list          # See available teammates
+connect clone alice           # Clone their environment
+# → ✓ Cloned 4 service(s) from alice
+# → Generated: .env.pconnect
+```
+
+### Create a Public URL for Webhooks
+
+Expose a local service with a public URL for webhook testing:
+
+```bash
+connect expose localhost:3000 --public
+# → https://abc123.privateconnect.co
+
+# Or with an existing service:
+connect link my-api --expires 7d --methods GET,POST
+# → https://xyz789.privateconnect.co
+```
+
+### Run as Background Daemon
+
+Keep services always available:
+
+```bash
+connect daemon install
+connect daemon status
+connect daemon logs
+```
+
+### Project-Based Configuration
+
+Create `pconnect.yml` in your project root:
+
+```yaml
+services:
+  - name: staging-db
+    port: 5432
+  - name: redis
+    port: 6379
+  - name: api
+    port: 8080
+```
+
+Then simply:
+
+```bash
+cd my-project
+connect dev
+# ✓ Connected: staging-db, redis, api
+
+npm run dev
+# All services available at localhost
+```
+
+## Verify Everything Works
+
+Run diagnostics to check your setup:
+
+```bash
+# Quick status check
+connect status
+
+# Full diagnostics
+connect doctor
+
+# Check specific service
+connect reach my-db --check
+```
+
+## Example Output
+
+Here's what a typical session looks like:
+
+```bash
+# Machine A (has database)
+$ connect expose localhost:5432 --name prod-db
+✓ Authenticated as user@example.com
+✓ Service exposed: prod-db
+✓ Target: localhost:5432
+✓ Protocol: tcp (auto-detected)
+✓ Ready to receive connections
+
+# Machine B (needs access)
+$ connect reach prod-db
+🔍 Reaching "prod-db"...
+
+  ✓ REACHABLE
+  ✓ Connected to prod-db on localhost:5432
+
+$ psql -h localhost -p 5432
+psql (15.2)
+Type "help" for help.
+
+postgres=#
+```
+
+## Next Steps
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card
+    title="Installation Options"
+    icon="download"
+    href="/installation"
+  >
+    Detailed installation for all platforms, including building from source
+  </Card>
+  <Card
+    title="CLI Reference"
+    icon="terminal"
+    href="/cli-reference"
+  >
+    Complete command reference and all available options
+  </Card>
+  <Card
+    title="Use Cases"
+    icon="lightbulb"
+    href="/use-cases"
+  >
+    Real-world scenarios and examples
+  </Card>
+  <Card
+    title="Advanced Features"
+    icon="gear"
+    href="/advanced"
+  >
+    Background daemon, project configs, local DNS, and more
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Troubleshooting
+
+### Connection refused
+
+Make sure the service is running and bound to localhost (or the IP you specified):
+
+```bash
+# Check if service is listening
+lsof -i :5432
+
+# Try exposing with explicit host
+connect expose 127.0.0.1:5432 --name my-db
+```
+
+### Can't authenticate
+
+If the browser doesn't open:
+
+```bash
+# Use API key instead
+connect up --api-key pc_xxx
+
+# Or use environment variable
+export PRIVATECONNECT_TOKEN=pc_xxx
+connect up
+```
+
+### Service not found
+
+List all available services:
+
+```bash
+connect status
+# Or with JSON output
+connect status --json
+```
+
+### Need help?
+
+Run diagnostics and share the output:
+
+```bash
+connect doctor
+```
+
+Join our [Discord community](https://discord.gg/KqdBcqRk5E) for support.

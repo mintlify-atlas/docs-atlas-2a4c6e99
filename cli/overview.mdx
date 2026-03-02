@@ -1,0 +1,209 @@
+---
+title: CLI Overview
+description: Command-line interface reference for Private Connect
+---
+
+The Private Connect CLI (`connect`) enables you to expose, access, and manage services across your development infrastructure.
+
+## Installation
+
+```bash
+npm install -g @privateconnect/cli
+```
+
+## Quick Start
+
+1. **Authenticate your agent:**
+   ```bash
+   connect up
+   ```
+
+2. **Expose a local service:**
+   ```bash
+   connect expose localhost:3306 --name mysql
+   ```
+
+3. **Access a remote service:**
+   ```bash
+   connect reach mysql
+   ```
+
+## Command Structure
+
+All commands follow the pattern:
+
+```bash
+connect <command> [arguments] [options]
+```
+
+## Global Options
+
+These options are available for most commands:
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+<ParamField path="--help" type="boolean">
+  Show help for a command
+</ParamField>
+
+## Core Workflow
+
+### Exposing Services
+
+Make your local services accessible to teammates:
+
+```bash
+connect expose localhost:5432 --name staging-db
+connect expose localhost:8080 --name api --public
+```
+
+### Reaching Services
+
+Access services exposed by your team:
+
+```bash
+connect reach staging-db
+connect reach api --port 8000
+```
+
+### Environment Management
+
+Share or clone entire environments:
+
+```bash
+# Share your environment
+connect share --name "staging-env" --expires 24h
+
+# Clone a teammate's environment
+connect clone alex
+```
+
+## Command Categories
+
+### Service Commands
+- [`connect up`](/cli/up) - Start the Private Connect agent
+- [`connect expose`](/cli/expose) - Expose a local service
+- [`connect reach`](/cli/reach) - Access a remote service
+- [`connect share`](/cli/share) - Share your environment
+- [`connect join`](/cli/join) - Join a shared environment
+- [`connect clone`](/cli/clone) - Clone a teammate's environment
+
+### Infrastructure Commands
+- [`connect proxy`](/cli/proxy) - HTTP/HTTPS proxy server
+- [`connect daemon`](/cli/daemon) - Background daemon management
+- [`connect dev`](/cli/dev) - Project-based development mode
+
+### Integration Commands
+- [`connect mcp`](/cli/mcp) - AI assistant integration (Model Context Protocol)
+
+## Exit Codes
+
+The CLI uses standard exit codes:
+
+- `0` - Success
+- `1` - General error (authentication, network, configuration)
+- `2` - Command usage error (invalid arguments)
+
+## Environment Variables
+
+<ParamField path="PRIVATECONNECT_TOKEN" type="string">
+  Pre-authenticated token for CI/CD environments
+</ParamField>
+
+<ParamField path="CONNECT_DAEMON" type="boolean">
+  Internal flag indicating daemon mode
+</ParamField>
+
+<ParamField path="CONNECT_PROXY_FOREGROUND" type="boolean">
+  Run proxy in foreground mode
+</ParamField>
+
+## Configuration
+
+Configuration is stored in `~/.privateconnect/config.json`:
+
+```json
+{
+  "agentId": "agent_xxx",
+  "token": "tok_xxx",
+  "apiKey": "pk_xxx",
+  "hubUrl": "https://hub.privateconnect.co",
+  "label": "macbook-pro",
+  "workspaceId": "ws_xxx"
+}
+```
+
+## Common Patterns
+
+### Local Development
+
+Connect to your team's staging database:
+
+```bash
+connect reach staging-db
+psql -h localhost -p 5432
+```
+
+### Sharing with Webhooks
+
+Expose your local API for webhook testing:
+
+```bash
+connect expose localhost:3000 --name webhook-test --public
+```
+
+### Multi-Service Projects
+
+Use a project config file (`pconnect.yml`):
+
+```yaml
+services:
+  - name: postgres
+    port: 5432
+  - name: redis
+    port: 6379
+  - name: api
+    port: 8080
+```
+
+Then connect to all services:
+
+```bash
+connect dev
+```
+
+## Troubleshooting
+
+### Check Agent Status
+
+```bash
+connect daemon status
+```
+
+### View Logs
+
+```bash
+connect daemon logs
+```
+
+### Diagnostics
+
+Run connectivity diagnostics:
+
+```bash
+connect reach my-service --check
+```
+
+### Port Conflicts
+
+Ports are automatically selected when conflicts occur. To use a specific port:
+
+```bash
+connect reach mysql --port 13306
+```

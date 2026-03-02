@@ -1,0 +1,610 @@
+---
+title: Reach Services
+description: Connect to remote services through Private Connect tunnels
+icon: download
+---
+
+## Overview
+
+The `connect reach` command creates a local tunnel to services exposed by other agents in your workspace. Once connected, the remote service appears on your localhost as if it were running locally.
+
+<Note>
+  **Quick Start**: Use the shorthand `connect <service-name>` instead of `connect reach <service-name>` for faster commands.
+</Note>
+
+## Basic Usage
+
+<Steps>
+  <Step title="Find available services">
+    If a service isn't found, Private Connect lists available services:
+    
+    ```bash
+    connect reach unknown-service
+    ```
+    
+    **Output:**
+    ```
+    [x] Service "unknown-service" not found
+    
+    Available services:
+      ● prod-db
+      ● staging-api
+      ● redis-cache
+    ```
+  </Step>
+  
+  <Step title="Connect to a service">
+    ```bash
+    connect reach prod-db
+    ```
+    
+    **Output:**
+    ```
+    🔍 Reaching "prod-db"...
+    
+      Service ID: svc_abc123
+      Target: localhost:5432
+      From: laptop (this agent)
+    
+      Running diagnostics...
+    
+      [ok] REACHABLE
+    
+      ┌─────────────────────────────────────────┐
+      │  DNS     [ok]  OK (192.168.1.50)        │
+      │  TCP     [ok]  OK                        │
+      │  Latency    45ms                         │
+      │  From       laptop                       │
+      └─────────────────────────────────────────┘
+    
+    📡 Creating local tunnel...
+      [ok] Connected to hub
+      [ok] Listening on localhost:5432
+    
+      [ok] Connected to prod-db
+    
+      Endpoints:
+        TCP:   localhost:5432
+        HTTP:  http://prod-db.localhost:3000
+               (proxy auto-started on port 3000)
+        psql:  psql -h localhost -p 5432
+    
+      Press Ctrl+C to disconnect
+    ```
+  </Step>
+  
+  <Step title="Use the service">
+    The service is now accessible on localhost:
+    
+    ```bash
+    psql -h localhost -p 5432 -U postgres
+    ```
+    
+    Or use the HTTP proxy:
+    
+    ```bash
+    curl http://prod-db.localhost:3000
+    ```
+  </Step>
+</Steps>
+
+## Port Selection
+
+Private Connect uses stable port allocation to ensure consistent local ports:
+
+### Default Behavior (Stable Ports)
+
+```bash
+connect reach prod-db
+```
+
+Port selection priority:
+1. **Saved mapping** - If you've reached this service before, uses the same port
+2. **Original port** - If available, uses the service's target port (e.g., 5432 for PostgreSQL)
+3. **Hash-derived** - Generates a stable port from the service name
+
+**Output:**
+```
+[ok] Listening on localhost:5432
+```
+
+On subsequent connections:
+
+```
+[ok] Listening on localhost:5432
+Port 5432 saved — will be reused next time.
+```
+
+### Custom Port
+
+Specify a custom local port with `--port`:
+
+```bash
+connect reach prod-db --port 5433
+```
+
+**Output:**
+```
+[ok] Listening on localhost:5433
+```
+
+<Warning>
+  If the specified port is in use, the command will fail:
+  
+  ```
+  [x] Port 5433 is in use
+    Try without --port to use a stable auto-assigned port
+  ```
+</Warning>
+
+## Diagnostics
+
+Private Connect runs comprehensive diagnostics before creating the tunnel:
+
+```bash
+connect reach api
+```
+
+**Output:**
+```
+[ok] REACHABLE
+
+┌─────────────────────────────────────────┐
+│  DNS     [ok]  OK (10.0.1.100)          │
+│  TCP     [ok]  OK                        │
+│  TLS     [ok]  OK                        │
+│  HTTP    [ok]  200 OK                    │
+│  Latency    32ms                         │
+│  From       laptop                       │
+└─────────────────────────────────────────┘
+```
+
+### Check-Only Mode
+
+Run diagnostics without creating a tunnel:
+
+```bash
+connect reach api --check
+```
+
+This runs the health check and exits without creating a tunnel.
+
+### JSON Output
+
+Get machine-readable diagnostics:
+
+```bash
+connect reach api --json
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "service": {
+    "id": "svc_abc123",
+    "name": "api",
+    "target": "localhost:8080"
+  },
+  "diagnostic": {
+    "dnsStatus": "OK (10.0.1.100)",
+    "tcpStatus": "OK",
+    "tlsStatus": "OK",
+    "httpStatus": "OK",
+    "latencyMs": 32,
+    "message": "OK",
+    "perspective": "agent-to-service",
+    "sourceLabel": "laptop"
+  },
+  "shareUrl": null
+}
+```
+
+## TLS Certificate Details
+
+For HTTPS services, Private Connect shows detailed TLS information:
+
+```bash
+connect reach api
+```
+
+**Output:**
+```
+[ok] REACHABLE
+
+┌─────────────────────────────────────────┐
+│  DNS     [ok]  OK                        │
+│  TCP     [ok]  OK                        │
+│  TLS     [ok]  OK                        │
+│  HTTP    [ok]  200 OK                    │
+│  Latency    28ms                         │
+└─────────────────────────────────────────┘
+
+🔒 TLS Certificate
+   Subject: api.internal.local
+   Issuer: Let's Encrypt
+   Expires: 89 days
+```
+
+### Certificate Issues
+
+If there are certificate problems:
+
+```
+[x] UNREACHABLE
+
+┌─────────────────────────────────────────┐
+│  DNS     [ok]  OK                        │
+│  TCP     [ok]  OK                        │
+│  TLS     [x]   FAIL                      │
+└─────────────────────────────────────────┘
+
+🔒 TLS Certificate
+   Subject: api.internal.local
+   Issuer: Self-Signed
+   Expires: -5 days
+   [!] Self-signed certificate
+   [x] Certificate has expired
+```
+
+## Local Proxy Integration
+
+Private Connect automatically starts a local HTTP proxy for subdomain-based access:
+
+```bash
+connect reach my-api
+```
+
+**Output:**
+```
+Endpoints:
+  TCP:   localhost:8080
+  HTTP:  http://my-api.localhost:3000
+         (proxy auto-started on port 3000)
+  curl:  curl http://my-api.localhost:3000
+```
+
+### Access via Subdomain
+
+```bash
+curl http://my-api.localhost:3000/health
+```
+
+No need to remember port numbers - just use the service name as a subdomain.
+
+### HTTPS Proxy
+
+Start the proxy with HTTPS:
+
+```bash
+connect proxy start --https
+```
+
+Then reach services:
+
+```bash
+connect reach my-api
+# → https://my-api.localhost:3000
+```
+
+<Tip>
+  See the [Local Proxy](/proxy) guide for complete proxy documentation.
+</Tip>
+
+## Service-Specific Commands
+
+Private Connect shows context-aware connection examples:
+
+<Tabs>
+  <Tab title="PostgreSQL">
+    ```bash
+    connect reach prod-db
+    ```
+    
+    **Output:**
+    ```
+    Endpoints:
+      TCP:   localhost:5432
+      HTTP:  http://prod-db.localhost:3000
+      psql:  psql -h localhost -p 5432
+    ```
+  </Tab>
+  
+  <Tab title="Redis">
+    ```bash
+    connect reach redis
+    ```
+    
+    **Output:**
+    ```
+    Endpoints:
+      TCP:   localhost:6379
+      HTTP:  http://redis.localhost:3000
+      redis: redis-cli -p 6379
+    ```
+  </Tab>
+  
+  <Tab title="MongoDB">
+    ```bash
+    connect reach mongo
+    ```
+    
+    **Output:**
+    ```
+    Endpoints:
+      TCP:   localhost:27017
+      HTTP:  http://mongo.localhost:3000
+      mongo: mongosh --port 27017
+    ```
+  </Tab>
+  
+  <Tab title="MySQL">
+    ```bash
+    connect reach mysql
+    ```
+    
+    **Output:**
+    ```
+    Endpoints:
+      TCP:   localhost:3306
+      HTTP:  http://mysql.localhost:3000
+      mysql: mysql -h 127.0.0.1 -P 3306
+    ```
+  </Tab>
+  
+  <Tab title="HTTP API">
+    ```bash
+    connect reach api
+    ```
+    
+    **Output:**
+    ```
+    Endpoints:
+      TCP:   localhost:8080
+      HTTP:  http://api.localhost:3000
+      curl:  curl http://api.localhost:3000
+    ```
+  </Tab>
+</Tabs>
+
+## Direct URL Reach
+
+Test connectivity to any URL without going through the hub:
+
+```bash
+connect reach https://api.example.com
+```
+
+**Output:**
+```
+🔍 Reaching "https://api.example.com"...
+
+  Target: api.example.com:443
+  Protocol: HTTPS
+
+  Running diagnostics...
+
+  [ok] REACHABLE
+
+  ┌─────────────────────────────────────────┐
+  │  DNS     [ok]  OK (93.184.216.34)       │
+  │  TCP     [ok]  OK                        │
+  │  TLS     [ok]  OK                        │
+  │  HTTP    [ok]  200 OK                    │
+  │  Latency    120ms                        │
+  └─────────────────────────────────────────┘
+
+  https://api.example.com is reachable.
+```
+
+This is useful for:
+- Testing external API connectivity
+- Debugging TLS/certificate issues
+- Checking firewall rules
+- Validating HTTP response codes
+
+<Note>
+  Direct URL reach runs diagnostics only - it doesn't create a tunnel.
+</Note>
+
+## External Services
+
+Services marked as "external" (no tunnel) are tested directly:
+
+```bash
+connect reach external-api
+```
+
+**Output:**
+```
+  Service ID: svc_xyz789
+  Target: api.external.com:443
+  Type: External (direct connection)
+
+  Running diagnostics...
+
+  [ok] REACHABLE
+
+  ┌─────────────────────────────────────────┐
+  │  DNS     [ok]  OK (1.2.3.4)             │
+  │  TCP     [ok]  OK                        │
+  │  TLS     [ok]  OK                        │
+  │  HTTP    [ok]  200 OK                    │
+  │  Latency    85ms                         │
+  └─────────────────────────────────────────┘
+```
+
+## Command Options
+
+| Option | Description | Example |
+|--------|-------------|----------|
+| `--port <port>` | Use a specific local port | `--port 5433` |
+| `--timeout <ms>` | Connection timeout in milliseconds | `--timeout 30000` |
+| `--check` | Run diagnostics only (no tunnel) | `--check` |
+| `--json` | Output in JSON format | `--json` |
+| `--hub <url>` | Hub URL (defaults to production) | `--hub https://api.privateconnect.co` |
+| `--config <path>` | Path to config file | `--config ~/.connect/config.json` |
+
+## Connection Lifecycle
+
+Private Connect maintains persistent connections with automatic reconnection:
+
+```bash
+connect reach prod-db
+```
+
+**Initial connection:**
+```
+[23:44:15] Connected to hub
+[ok] Connected to prod-db
+```
+
+**If the hub restarts:**
+```
+[23:50:30] Server restarting, reconnecting...
+[23:50:32] Reconnected to hub
+   Re-establishing tunnel...
+[ok] Tunnel established
+
+📡 Service "prod-db" is accessible through the hub
+   Public URL: https://abc123.privateconnect.co
+
+   Press Ctrl+C to stop exposing
+```
+
+**On network interruption:**
+```
+[23:55:00] Reconnecting... (transport close)
+[23:55:02] Reconnecting... (attempt 2)
+[23:55:05] Reconnected to hub
+   Re-establishing tunnel...
+```
+
+<Tip>
+  Private Connect automatically handles reconnections. Your local applications can keep their connections open - the tunnel will seamlessly restore.
+</Tip>
+
+## Error Handling
+
+### Service Not Found
+
+```bash
+connect reach nonexistent
+```
+
+**Output:**
+```
+[x] Service "nonexistent" not found
+
+Available services:
+  ● prod-db
+  ● staging-api
+  ● redis-cache
+```
+
+### Port Already in Use
+
+```bash
+connect reach prod-db --port 5432
+```
+
+**Output:**
+```
+[x] Port 5432 is already in use
+  Try a different port with --port <port>
+```
+
+### Service Unreachable
+
+```bash
+connect reach broken-api
+```
+
+**Output:**
+```
+[x] UNREACHABLE
+
+┌─────────────────────────────────────────┐
+│  DNS     [ok]  OK                        │
+│  TCP     [x]   FAIL                      │
+└─────────────────────────────────────────┘
+
+[!] TCP connection failed: ECONNREFUSED
+
+  Check that your service is running on the target port
+
+Cannot create tunnel - service is not reachable.
+```
+
+### Not Authenticated
+
+```bash
+connect reach prod-db
+```
+
+**Output:**
+```
+[x] Agent not configured
+  Run connect up --api-key <key> first.
+```
+
+## Examples
+
+<CodeGroup>
+```bash Connect to PostgreSQL
+# Connect to production database
+connect reach prod-db
+
+# Use with psql
+psql -h localhost -p 5432 -U postgres
+```
+
+```bash Connect to HTTP API
+# Reach an API service
+connect reach staging-api
+
+# Test with curl
+curl http://staging-api.localhost:3000/health
+```
+
+```bash Custom Port
+# Use a specific local port
+connect reach redis --port 6380
+
+# Connect with redis-cli
+redis-cli -p 6380
+```
+
+```bash Diagnostics Only
+# Check connectivity without creating tunnel
+connect reach api --check
+
+# Machine-readable output
+connect reach api --check --json
+```
+
+```bash Direct URL Test
+# Test external API
+connect reach https://api.stripe.com
+
+# Test internal service
+connect reach http://vault.internal:8200
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Expose Services" icon="upload" href="/core/expose-services">
+    Make your services accessible to others
+  </Card>
+  <Card title="Local Proxy" icon="globe" href="/proxy">
+    Access services via subdomains (my-api.localhost)
+  </Card>
+  <Card title="Share & Collaborate" icon="users" href="/core/share-collaborate">
+    Share your environment with teammates
+  </Card>
+  <Card title="Project Dev Mode" icon="folder" href="/dev-mode">
+    Auto-connect services from pconnect.yml
+  </Card>
+</CardGroup>

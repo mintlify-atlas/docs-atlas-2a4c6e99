@@ -1,0 +1,740 @@
+---
+title: 'Broker Mode'
+description: 'Control AI agent permissions with policy-based governance'
+icon: 'shield-halved'
+---
+
+## Overview
+
+Broker mode provides policy-based permission control for AI agents, ensuring they can only perform authorized actions on your codebase.
+
+<Warning>
+  Experimental: AI agent governance is an emerging space. This feature is forward-looking and may change.
+</Warning>
+
+## Quick Start
+
+<Steps>
+  <Step title="Initialize Policy">
+    ```bash
+    connect broker init
+    ```
+    
+    Creates `.connect/policy.yml` with secure defaults:
+    ```yaml
+    version: 1
+    default: review
+    
+    rules:
+      # Allow source code
+      - path: src/**
+        action: allow
+      
+      # Block sensitive files
+      - path: .env*
+        action: block
+        reason: Environment files may contain secrets
+    ```
+  </Step>
+  
+  <Step title="Run AI Agent">
+    ```bash
+    # Run with broker enforcement
+    connect broker aider
+    
+    # Or any AI agent
+    connect broker run -- cursor
+    connect broker run -- claude
+    ```
+  </Step>
+  
+  <Step title="Monitor Actions">
+    ```bash
+    # View audit log
+    connect broker audit
+    
+    # View statistics
+    connect broker audit --stats
+    ```
+  </Step>
+</Steps>
+
+## Policy Configuration
+
+### Policy Structure
+
+```yaml
+version: 1
+default: review  # allow | block | review
+
+rules:
+  # File access rules
+  - path: src/**
+    action: allow
+  
+  - path: .env*
+    action: block
+    reason: Environment files may contain secrets
+  
+  # Shell command rules
+  - command: git add *
+    action: allow
+  
+  - command: rm -rf *
+    action: block
+    reason: Destructive command
+  
+  # Git operation rules
+  - git: force-push
+    action: block
+    reason: Force push can destroy history
+```
+
+### Actions
+
+| Action | Behavior | Use Case |
+|--------|----------|----------|
+| `allow` | Permit silently | Source code, safe commands |
+| `block` | Deny immediately | Secrets, destructive operations |
+| `review` | Prompt for approval | Config files, git push |
+
+### Pattern Matching
+
+<AccordionGroup>
+  <Accordion title="File Paths">
+    Supports glob patterns:
+    
+    ```yaml
+    # Match all TypeScript files
+    - path: "**/*.ts"
+      action: allow
+    
+    # Match specific directory
+    - path: src/auth/**
+      action: review
+    
+    # Match dotfiles
+    - path: .env*
+      action: block
+    
+    # Wildcards
+    # * - matches any characters except /
+    # ** - matches any characters including /
+    # ? - matches single character
+    # [abc] - matches any character in brackets
+    ```
+  </Accordion>
+  
+  <Accordion title="Commands">
+    Token-based matching:
+    
+    ```yaml
+    # Exact match
+    - command: git status
+      action: allow
+    
+    # Wildcard arguments
+    - command: npm install *
+      action: allow
+    
+    # Pattern matching
+    - command: git push *
+      action: review
+    
+    # Block dangerous patterns
+    - command: rm -rf *
+      action: block
+    ```
+    
+    Security:
+    - Commands with shell operators (`;`, `&&`, `|`) are blocked automatically
+    - Prevents command chaining that could bypass policy
+  </Accordion>
+  
+  <Accordion title="Git Operations">
+    High-level git operation control:
+    
+    ```yaml
+    # Git operations
+    - git: commit
+      action: allow
+    
+    - git: push
+      action: review
+    
+    - git: force-push
+      action: block
+    
+    - git: branch-delete
+      action: review
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Default Policy
+
+Initialization creates a minimal secure policy:
+
+<CodeGroup>
+```yaml Minimal (Generated)
+version: 1
+default: review
+
+rules:
+  # Allow source code
+  - path: src/**
+    action: allow
+  - path: lib/**
+    action: allow
+  - path: "**/*.ts"
+    action: allow
+  - path: "**/*.js"
+    action: allow
+  - path: "**/*.md"
+    action: allow
+  
+  # Block sensitive files
+  - path: .env*
+    action: block
+    reason: Environment files may contain secrets
+  - path: "**/*.key"
+    action: block
+    reason: Private keys are sensitive
+  - path: .github/workflows/**
+    action: block
+    reason: CI/CD workflows can run arbitrary code
+  
+  # Protect broker config
+  - path: .connect/**
+    action: block
+    reason: Broker configuration is protected
+  
+  # Command rules
+  - command: rm -rf *
+    action: block
+    reason: Destructive command
+  - command: git push -f *
+    action: block
+    reason: Force push can overwrite history
+  - command: npm install *
+    action: allow
+  - command: git *
+    action: allow
+```
+
+```yaml Comprehensive (Available)
+version: 1
+default: review
+
+rules:
+  # Source code - allow
+  - path: src/**
+    action: allow
+  - path: lib/**
+    action: allow
+  - path: app/**
+    action: allow
+  - path: "**/*.ts"
+    action: allow
+  - path: "**/*.js"
+    action: allow
+  - path: "**/*.py"
+    action: allow
+  
+  # Config - review
+  - path: "**/*.json"
+    action: review
+  - path: "**/*.yaml"
+    action: review
+  
+  # Secrets - block
+  - path: .env*
+    action: block
+    reason: Environment files may contain secrets
+  - path: "**/.ssh/**"
+    action: block
+    reason: SSH configuration is sensitive
+  - path: "**/secrets/**"
+    action: block
+    reason: Secrets directory is protected
+  
+  # CI/CD - block
+  - path: .github/workflows/**
+    action: block
+    reason: CI/CD workflows can run arbitrary code
+  - path: "**/*.tf"
+    action: block
+    reason: Terraform files are sensitive
+  
+  # Commands
+  - command: npm install *
+    action: allow
+  - command: git add *
+    action: allow
+  - command: git commit *
+    action: allow
+  - command: git push *
+    action: review
+    reason: Pushing code to remote
+  - command: git push -f *
+    action: block
+    reason: Force push can overwrite history
+  - command: sudo *
+    action: review
+    reason: Elevated privileges
+  - command: rm -rf *
+    action: block
+    reason: Destructive command
+  
+  # Git operations
+  - git: force-push
+    action: block
+    reason: Force push can destroy history
+  - git: branch-delete
+    action: review
+    reason: Deleting branches should be reviewed
+```
+</CodeGroup>
+
+## Running AI Agents
+
+### Supported Agents
+
+```bash
+# Shortcuts for common agents
+connect broker aider
+connect broker claude
+connect broker cursor
+connect broker cline
+connect broker goose
+
+# Custom agents
+connect broker run -- your-agent
+```
+
+### Execution Modes
+
+<Tabs>
+  <Tab title="Interactive (Default)">
+    Prompts for approval on `review` actions:
+    
+    ```bash
+    connect broker aider
+    ```
+    
+    Output when agent attempts restricted action:
+    ```
+    ┌─────────────────────────────────────────────────┐
+    │  🛡️  Agent Permission Request                    │
+    ├─────────────────────────────────────────────────┤
+    │  Type: file                                     │
+    │  Target: .env.production                        │
+    │  Reason: Environment files may contain secrets │
+    └─────────────────────────────────────────────────┘
+    
+      Allow? [y/N]:
+    ```
+  </Tab>
+  
+  <Tab title="Auto-Approve">
+    ```bash
+    # CLI flag
+    connect broker aider --yes
+    
+    # Environment variable
+    CONNECT_AUTO_APPROVE=1 connect broker aider
+    ```
+    
+    <Warning>
+      Only use in trusted environments. All review actions will be approved.
+    </Warning>
+  </Tab>
+  
+  <Tab title="Auto-Deny">
+    ```bash
+    # CLI flag
+    connect broker aider --no
+    
+    # Environment variable
+    CONNECT_AUTO_DENY=1 connect broker aider
+    ```
+    
+    Useful for CI/CD to ensure no unexpected actions.
+  </Tab>
+  
+  <Tab title="Observe Only">
+    ```bash
+    connect broker aider --observe
+    ```
+    
+    Logs actions but doesn't enforce. Useful for policy development.
+  </Tab>
+</Tabs>
+
+### Environment Variables
+
+```bash
+# Set in agent environment
+export CONNECT_BROKER=1
+export CONNECT_AGENT=aider
+export CONNECT_WORKING_DIR=/path/to/project
+
+# Optional
+export CONNECT_AUTO_APPROVE=1
+export CONNECT_AUTO_DENY=1
+export CONNECT_OBSERVE=1
+```
+
+## Git Hooks
+
+### Installation
+
+```bash
+connect broker hooks
+```
+
+Installs hooks:
+- **pre-commit**: Checks staged files against policy
+- **pre-push**: Checks for force pushes
+
+```bash
+[ok] Installed 2 git hook(s)
+  pre-commit: .git/hooks/pre-commit
+  pre-push: .git/hooks/pre-push
+
+  Existing hooks backed up and will be called after broker check.
+  Run 'connect broker hooks --uninstall' to restore original hooks.
+```
+
+### Hook Behavior
+
+<Steps>
+  <Step title="pre-commit">
+    Validates all staged files:
+    
+    ```bash
+    git add .env.production
+    git commit -m "Update env"
+    ```
+    
+    Output:
+    ```bash
+    [x] Blocked: .env.production
+      Environment files may contain secrets
+    
+    [x] Commit blocked due to policy violations
+    ```
+  </Step>
+  
+  <Step title="pre-push">
+    Detects force pushes:
+    
+    ```bash
+    git push --force
+    ```
+    
+    Output:
+    ```bash
+    [x] Git force-push blocked by policy
+      Reason: Force push can destroy history
+    ```
+  </Step>
+</Steps>
+
+### Hook Chaining
+
+Existing hooks are preserved:
+
+```bash
+# Before: .git/hooks/pre-commit
+#!/bin/sh
+echo "Running tests..."
+npm test
+
+# After installation:
+# Original hook backed up to .git/hooks/pre-commit.connect-backup
+# New hook chains to original:
+
+#!/bin/sh
+# Connect Agent Permission Broker - pre-commit hook
+connect broker git-check pre-commit || exit $?
+
+# Chain to original hook
+if [ -x ".git/hooks/pre-commit.connect-backup" ]; then
+  ".git/hooks/pre-commit.connect-backup" "$@" || exit $?
+fi
+```
+
+### Uninstallation
+
+```bash
+connect broker hooks --uninstall
+```
+
+Restores original hooks from backup.
+
+## Audit Logging
+
+### View Audit Log
+
+```bash
+# Recent actions
+connect broker audit
+
+# Limit output
+connect broker audit --limit 100
+
+# Filter by type
+connect broker audit --type file
+connect broker audit --type command
+connect broker audit --type git
+
+# Filter by action
+connect broker audit --action blocked
+connect broker audit --action allowed
+```
+
+Output:
+
+```bash
+📋 Recent Agent Actions (50)
+
+10:30:45 [ok] [file] src/api/users.ts
+10:30:46 [ok] [command] git add .
+10:30:47 ? [file] package.json (approved)
+10:30:50 [x] [file] .env.production
+10:30:52 [ok] [git] commit
+10:30:55 ? [git] push (denied)
+
+  Showing 50 of 234 entries
+  Full log: /home/user/.connect/audit.jsonl
+```
+
+### Audit Statistics
+
+```bash
+connect broker audit --stats
+```
+
+Output:
+
+```bash
+📊 Audit Statistics
+
+  Total actions: 1,234
+  Allowed: 1,045
+  Blocked: 89
+  Reviewed: 100
+
+  By type:
+    file: 856
+    command: 298
+    git: 80
+```
+
+### Audit Log Format
+
+Stored as JSONL (`~/.connect/audit.jsonl`):
+
+```json
+{"ts":"2026-03-02T10:30:45.123Z","agent":"aider","type":"file","action":"allow","target":"src/api/users.ts","rule":"src/**","workingDir":"/home/user/project","pid":12345}
+{"ts":"2026-03-02T10:30:50.456Z","agent":"aider","type":"file","action":"block","target":".env.production","rule":".env*","reason":"Environment files may contain secrets","workingDir":"/home/user/project","pid":12345}
+{"ts":"2026-03-02T10:30:55.789Z","agent":"aider","type":"git","action":"review","target":"push","userApproved":false,"workingDir":"/home/user/project","pid":12345}
+```
+
+### Log Rotation
+
+Automatic rotation at 5MB:
+
+```bash
+# Archives old entries
+~/.connect/audit.1709380800000.jsonl
+
+# Keeps recent ~1MB in active log
+~/.connect/audit.jsonl
+```
+
+## Status and Monitoring
+
+### Broker Status
+
+```bash
+connect broker status
+```
+
+Output:
+
+```bash
+🛡️  Agent Permission Broker Status
+
+  [ok] Policy: configured
+    /home/user/project/.connect/policy.yml
+    Default action: review
+    Rules: 42
+
+  Audit Log:
+    Total actions: 1,234
+    Allowed: 1,045
+    Blocked: 89
+    Reviewed: 100
+
+  Git Hooks:
+    [ok] pre-commit hook installed
+    [ok] pre-push hook installed
+```
+
+### File Operations
+
+Manually check a file:
+
+```bash
+connect broker check .env.production
+```
+
+Output:
+
+```bash
+[x] File write blocked: .env.production
+  Reason: Environment files may contain secrets
+```
+
+### Command Validation
+
+```bash
+connect broker exec -- rm -rf /tmp/cache
+```
+
+## Security Features
+
+### Shell Injection Prevention
+
+Commands are validated for shell metacharacters:
+
+```typescript
+// Blocked patterns
+const dangerousPatterns = [
+  { pattern: /;\s*\S/, desc: 'command chaining (;)' },
+  { pattern: /&&\s*\S/, desc: 'conditional chaining (&&)' },
+  { pattern: /\|\|\s*\S/, desc: 'conditional chaining (||)' },
+  { pattern: /\|\s*\S/, desc: 'piping (|)' },
+  { pattern: /`[^`]+`/, desc: 'command substitution (backticks)' },
+  { pattern: /\$\([^)]+\)/, desc: 'command substitution ($())' },
+];
+```
+
+Example:
+
+```bash
+# Blocked automatically
+connect broker exec -- 'ls; rm -rf /'
+
+# Output:
+[x] Command validation failed
+  Command contains command chaining (;) which could bypass policy
+```
+
+### Workspace Boundaries
+
+Prevents access outside project:
+
+```typescript
+const isOutsideWorkspace =
+  relativePath === '..' ||
+  relativePath.startsWith(`..${path.sep}`) ||
+  path.isAbsolute(relativePath);
+
+if (isOutsideWorkspace) {
+  return {
+    action: 'block',
+    reason: 'Path is outside of the workspace boundary',
+  };
+}
+```
+
+### Audit Trail
+
+All actions logged with:
+- Timestamp
+- Agent identifier
+- Action type and target
+- Decision (allow/block/review)
+- User approval (for reviews)
+- Process ID
+- Working directory
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Restrictive" icon="lock">
+    Begin with `default: review` or `default: block`:
+    ```yaml
+    default: review
+    ```
+    Then allow specific patterns.
+  </Card>
+  
+  <Card title="Use Observe Mode" icon="eye">
+    Test policies in observe mode first:
+    ```bash
+    connect broker aider --observe
+    connect broker audit
+    ```
+  </Card>
+  
+  <Card title="Review Audit Logs" icon="clipboard-list">
+    Regularly check what agents are doing:
+    ```bash
+    connect broker audit --stats
+    ```
+  </Card>
+  
+  <Card title="Protect Broker Config" icon="shield">
+    Always block `.connect/**`:
+    ```yaml
+    - path: .connect/**
+      action: block
+    ```
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Policy Not Found
+
+```bash
+[!] No policy found. Using secure defaults.
+  Run 'connect broker init' to customize.
+```
+
+Solution:
+
+```bash
+cd /path/to/project
+connect broker init
+```
+
+### Agent Bypass
+
+Broker only controls agents run through `connect broker`:
+
+```bash
+# Protected
+connect broker aider
+
+# NOT protected
+aider  # Direct execution
+```
+
+### Hook Not Triggering
+
+```bash
+# Verify hooks are installed
+ls -la .git/hooks/
+
+# Check permissions
+chmod +x .git/hooks/pre-commit
+chmod +x .git/hooks/pre-push
+
+# Reinstall
+connect broker hooks
+```

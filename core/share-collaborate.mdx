@@ -1,0 +1,576 @@
+---
+title: Share & Collaborate
+description: Share your development environment with teammates
+icon: users
+---
+
+## Overview
+
+Private Connect makes it easy to share your local services with teammates. Whether you need to collaborate on a feature, debug together, or give someone access to your environment, Private Connect provides multiple sharing methods to fit your workflow.
+
+## Environment Shares
+
+Share all your active services with a teammate using a simple join code.
+
+<Steps>
+  <Step title="Create a share">
+    On your machine:
+    
+    ```bash
+    connect share
+    ```
+    
+    **Output:**
+    ```
+    🤝 Creating environment share...
+    
+    [ok] Environment share created!
+    
+      ┌─────────────────────────────────────────────────┐
+      │  Share Code: x7k9m2                             │
+      └─────────────────────────────────────────────────┘
+    
+      Your teammate can join with:
+    
+        connect join x7k9m2
+    
+      Routes being shared:
+        • prod-db → localhost:5432
+        • staging-api → localhost:8080
+        • redis → localhost:6379
+    
+      Expires in 24 hours (Mon Mar 03 2026 23:44:00)
+    ```
+  </Step>
+  
+  <Step title="Teammate joins">
+    Your teammate runs:
+    
+    ```bash
+    connect join x7k9m2
+    ```
+    
+    They now have access to the same services on the same ports.
+  </Step>
+  
+  <Step title="Both work together">
+    You both can now access the same services:
+    
+    ```bash
+    # You
+    psql -h localhost -p 5432
+    
+    # Teammate
+    psql -h localhost -p 5432
+    # → Connected to the same database
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Environment shares include all actively exposed services at the time of creation. Services exposed after creating the share are not included.
+</Note>
+
+### Custom Expiration
+
+Control how long the share is valid:
+
+```bash
+connect share --expires 1h   # 1 hour
+connect share --expires 4h   # 4 hours
+connect share --expires 7d   # 7 days
+```
+
+**Output:**
+```
+Expires in 1 hours (Mon Mar 02 2026 00:44:00)
+```
+
+### Named Shares
+
+Give your share a descriptive name:
+
+```bash
+connect share --name "Bug #123 debugging"
+```
+
+**Output:**
+```
+[ok] Environment share created!
+
+  ┌─────────────────────────────────────────────────┐
+  │  Share Code: x7k9m2                             │
+  └─────────────────────────────────────────────────┘
+
+  Name: Bug #123 debugging
+  Expires in 24 hours
+```
+
+## List Active Shares
+
+See all your active environment shares:
+
+```bash
+connect share --list
+```
+
+**Output:**
+```
+📋 Active Environment Shares
+
+  x7k9m2 (Bug #123 debugging)
+    Routes: 3 | Joined: 2 | Expires: 23h
+
+  a4b8c1
+    Routes: 1 | Joined: 0 | Expires: 6h
+```
+
+## Revoke a Share
+
+Remove access to a share:
+
+```bash
+connect share revoke x7k9m2
+```
+
+**Output:**
+```
+[ok] Share x7k9m2 revoked.
+```
+
+## Public Share Links
+
+Create public URLs that anyone can access - perfect for webhooks, demos, and external integrations.
+
+### Quick Share
+
+Create a temporary public URL when exposing a service:
+
+```bash
+connect expose localhost:3000 --link
+```
+
+**Output:**
+```
+📡 Service "my-app" is now accessible through the hub
+
+🔗 Public URL: https://x7k9m2.privateconnect.co
+   Expires: Mon Mar 03 2026 23:44:00
+```
+
+### Persistent Public URLs
+
+Create a permanent public URL:
+
+```bash
+connect expose localhost:3000 --public
+```
+
+**Output:**
+```
+🌐 Public URL: https://abc123.privateconnect.co
+   External services (Stripe, GitHub, etc.) can send webhooks to this URL
+
+📡 Service "my-app" is now accessible through the hub
+
+   Public URL: https://abc123.privateconnect.co
+   Anyone can reach this service at the URL above
+```
+
+### Custom Expiration
+
+```bash
+connect expose localhost:3000 --link --link-expires 1h
+connect expose localhost:3000 --link --link-expires 7d
+```
+
+<Tabs>
+  <Tab title="1 Hour">
+    ```bash
+    connect expose localhost:3000 --link --link-expires 1h
+    ```
+    
+    Perfect for quick demos and testing.
+  </Tab>
+  
+  <Tab title="24 Hours (Default)">
+    ```bash
+    connect expose localhost:3000 --link
+    ```
+    
+    Good for day-long collaborations.
+  </Tab>
+  
+  <Tab title="7 Days">
+    ```bash
+    connect expose localhost:3000 --link --link-expires 7d
+    ```
+    
+    Ideal for longer-term sharing.
+  </Tab>
+</Tabs>
+
+## Webhook Integration
+
+Public share links are perfect for testing webhooks from external services:
+
+<CodeGroup>
+```bash Stripe Webhooks
+# Expose your webhook endpoint
+connect expose localhost:3000 --link --link-expires 2h
+# → https://x7k9m2.privateconnect.co
+
+# Use in Stripe dashboard:
+# https://x7k9m2.privateconnect.co/webhooks/stripe
+```
+
+```bash GitHub Webhooks
+# Expose your app
+connect expose localhost:4000 --link
+# → https://a4b8c1.privateconnect.co
+
+# Add to GitHub repository settings:
+# https://a4b8c1.privateconnect.co/webhooks/github
+```
+
+```bash Twilio Callbacks
+# Expose your callback server
+connect expose localhost:5000 --link --link-expires 1h
+# → https://m9k2p7.privateconnect.co
+
+# Use as Twilio callback URL:
+# https://m9k2p7.privateconnect.co/voice/callback
+```
+</CodeGroup>
+
+<Warning>
+  Public links expose your local service to the internet. Only use them for services designed to handle public traffic.
+</Warning>
+
+## Clone Teammate Environment
+
+Copy a teammate's service configuration to your machine:
+
+```bash
+# List available teammates
+connect clone --list
+```
+
+**Output:**
+```
+Available teammates:
+  • alice (4 services)
+  • bob (2 services)
+  • charlie (3 services)
+```
+
+### Clone Services
+
+```bash
+connect clone alice
+```
+
+**Output:**
+```
+✓ Cloned 4 service(s) from alice
+→ Generated: .env.pconnect
+
+Services cloned:
+  • prod-db → localhost:5432
+  • staging-api → localhost:8080
+  • redis → localhost:6379
+  • mongo → localhost:27017
+
+Connection strings saved to .env.pconnect
+Run: source .env.pconnect
+```
+
+### Generated Environment File
+
+The `.env.pconnect` file contains connection strings:
+
+```bash .env.pconnect
+DATABASE_URL=postgresql://localhost:5432/myapp
+REDIS_URL=redis://localhost:6379
+MONGO_URL=mongodb://localhost:27017/myapp
+API_URL=http://localhost:8080
+```
+
+Load it in your shell:
+
+```bash
+source .env.pconnect
+```
+
+<Tip>
+  Cloning is perfect for onboarding new team members. They get instant access to all the services they need.
+</Tip>
+
+## Debug Session Sharing
+
+Share live traffic inspection with teammates for pair-debugging:
+
+```bash
+connect expose localhost:3000 --debug
+```
+
+**Output:**
+```
+🔍 Debug mode enabled
+   Share this link: https://app.privateconnect.co/debug/abc123
+   Anyone with this link can see live traffic
+```
+
+### With AI Assistance
+
+```bash
+connect expose localhost:3000 --debug --ai
+```
+
+**Output:**
+```
+🔍 Debug mode enabled
+   Share this link: https://app.privateconnect.co/debug/abc123
+   Anyone with this link can see live traffic
+   AI Copilot: enabled
+```
+
+### Debug Viewer Features
+
+Teammates with the debug link can:
+- See real-time request/response traffic
+- Inspect headers and payloads
+- View protocol-specific data (HTTP, GraphQL, PostgreSQL, Redis)
+- See who else is viewing (presence indicators)
+- Ask the AI copilot questions about traffic
+- Replay captured requests
+
+<Note>
+  See the [Live Debugging](/debugging) guide for complete debug mode documentation.
+</Note>
+
+## Share Specific Services
+
+Instead of sharing your entire environment, share specific services:
+
+<Steps>
+  <Step title="Expose the service with a public URL">
+    ```bash
+    connect expose localhost:8080 --name api --public
+    ```
+  </Step>
+  
+  <Step title="Share the URL">
+    Send the public URL to your teammate:
+    
+    ```
+    https://abc123.privateconnect.co
+    ```
+  </Step>
+  
+  <Step title="Teammate accesses it">
+    Your teammate can access it directly:
+    
+    ```bash
+    curl https://abc123.privateconnect.co/health
+    ```
+  </Step>
+</Steps>
+
+## Security Best Practices
+
+<Warning>
+  **Database Services**: Don't use `--public` or `--link` with database services (PostgreSQL, MySQL, Redis, MongoDB). Use environment shares or `connect reach` instead.
+</Warning>
+
+### Recommended Approach
+
+<Tabs>
+  <Tab title="HTTP/API Services">
+    **Safe to use public links:**
+    
+    ```bash
+    connect expose localhost:3000 --link --link-expires 1h
+    ```
+    
+    Perfect for:
+    - Web apps
+    - REST APIs
+    - Webhook endpoints
+    - Demo sites
+  </Tab>
+  
+  <Tab title="Database Services">
+    **Use environment shares:**
+    
+    ```bash
+    # You
+    connect share
+    # → Share code: x7k9m2
+    
+    # Teammate
+    connect join x7k9m2
+    psql -h localhost -p 5432
+    ```
+    
+    Safe for:
+    - PostgreSQL
+    - MySQL
+    - MongoDB
+    - Redis
+  </Tab>
+</Tabs>
+
+### Automatic Protection
+
+Private Connect prevents public URLs for database ports:
+
+```bash
+connect expose localhost:5432 --public
+```
+
+**Output:**
+```
+[!] --public creates a public HTTP URL, which doesn't work for database/TCP services (port 5432).
+    To access this service remotely, use: connect reach postgres
+```
+
+Protected ports:
+- `5432` (PostgreSQL)
+- `3306` (MySQL)
+- `27017` (MongoDB)
+- `6379` (Redis)
+- `6380` (Redis)
+- `26257` (CockroachDB)
+- `9042` (Cassandra)
+- `8529` (ArangoDB)
+- `7687` (Neo4j)
+- `1433` (SQL Server)
+- `1521` (Oracle)
+- `50000` (DB2)
+
+## Command Reference
+
+### Environment Shares
+
+```bash
+# Create share
+connect share [options]
+
+Options:
+  --name <name>      Descriptive name for the share
+  --expires <time>   Expiration time: 1h, 4h, 24h, 7d
+  --list            List active shares
+
+# Revoke share
+connect share revoke <code>
+
+# Join share
+connect join <code>
+```
+
+### Public Links
+
+```bash
+# Quick share link
+connect expose <target> --link [options]
+
+Options:
+  --link-expires <time>   Link expiration: 1h, 24h, 7d
+
+# Persistent public URL
+connect expose <target> --public
+```
+
+### Clone Environment
+
+```bash
+# List teammates
+connect clone --list
+
+# Clone from teammate
+connect clone <teammate>
+```
+
+### Debug Sessions
+
+```bash
+# Share debug session
+connect expose <target> --debug [--ai]
+```
+
+## Examples
+
+<CodeGroup>
+```bash Quick Team Collaboration
+# Developer A: Share environment
+connect share --name "Feature X development" --expires 4h
+# → Share code: x7k9m2
+
+# Developer B: Join
+connect join x7k9m2
+# → Connected to all services
+
+# Both can work on same services
+psql -h localhost -p 5432
+```
+
+```bash Webhook Testing
+# Expose local webhook endpoint
+connect expose localhost:3000 --link --link-expires 2h
+# → https://x7k9m2.privateconnect.co/webhooks/stripe
+
+# Add to Stripe dashboard
+# Test webhooks locally
+```
+
+```bash Demo Sharing
+# Share demo app with client
+connect expose localhost:3000 --link --link-expires 7d
+# → https://a4b8c1.privateconnect.co
+
+# Send link to client
+# They can view the app in their browser
+```
+
+```bash Pair Debugging
+# Start debug session
+connect expose localhost:8080 --debug --ai
+# → Debug link: https://app.privateconnect.co/debug/abc123
+
+# Share link with teammate
+# Both watch traffic in real-time
+# Ask AI about errors
+```
+
+```bash Onboarding
+# New team member
+connect clone --list
+# → alice (4 services)
+
+connect clone alice
+# → ✓ Cloned 4 services
+# → Generated .env.pconnect
+
+source .env.pconnect
+npm run dev
+# → Everything just works
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Live Debugging" icon="bug" href="/debugging">
+    Inspect traffic in real-time with AI assistance
+  </Card>
+  <Card title="Public Links" icon="link" href="/public-links">
+    Advanced public link features and restrictions
+  </Card>
+  <Card title="Project Dev Mode" icon="folder" href="/dev-mode">
+    Share entire project environments with pconnect.yml
+  </Card>
+  <Card title="Security" icon="shield" href="/security">
+    Security best practices and architecture
+  </Card>
+</CardGroup>

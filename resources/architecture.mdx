@@ -1,0 +1,490 @@
+---
+title: Architecture
+description: How Private Connect works under the hood
+icon: diagram-project
+---
+
+Understand the hub-and-spoke architecture that powers Private Connect's secure service mesh.
+
+## Overview
+
+Private Connect uses a **hub-and-spoke architecture** where agents connect to a central coordination layer (the Hub). Services are exposed from one machine and accessed from another through encrypted tunnels.
+
+```
+┌─────────────────┐         ┌───────┐         ┌─────────────────┐
+│   Your Server   │────────▶│  Hub  │◀────────│   Your Laptop   │
+│                 │         └───────┘         │                 │
+│ connect :5432   │                           │ connect prod-db │
+└─────────────────┘                           └─────────────────┘
+```
+
+<CardGroup cols={2}>
+  <Card title="Agents" icon="laptop">
+    Lightweight CLI running on each machine, managing connections
+  </Card>
+  <Card title="Hub" icon="server">
+    Central coordination layer for routing and metadata
+  </Card>
+  <Card title="Services" icon="plug">
+    Exposed endpoints accessible by name across your workspace
+  </Card>
+  <Card title="Workspace" icon="users">
+    Isolated environment where all your services and agents live
+  </Card>
+</CardGroup>
+
+---
+
+## Core Components
+
+### Agents
+
+An agent runs on each machine where you want to expose or access services. Agents are responsible for:
+
+- Establishing secure WebSocket connections to the Hub
+- Exposing local services to the workspace
+- Creating tunnels to remote services
+- Maintaining stable port mappings
+- Reporting health and connectivity status
+
+```bash
+# Start an agent
+connect up
+
+# Expose a service
+connect expose localhost:5432 --name prod-db
+
+# Access a service
+connect reach prod-db
+```
+
+### The Hub
+
+The Hub is the central coordination service that:
+
+- Authenticates agents and maintains workspace isolation
+- Stores service metadata (names, targets, ownership)
+- Routes traffic between agents as an opaque relay
+- Tracks connection metadata for audit logging
+- Enforces access controls and permissions
+
+<Note>
+  The Hub sees metadata (service names, connection times) but **does not inspect payload data**. All traffic passes through as base64-encoded packets.
+</Note>
+
+### Services
+
+Services are exposed endpoints that can be accessed by name:
+
+```bash
+# Service = name + target
+connect expose localhost:5432 --name prod-db
+#                ^^^^^^^^^^^^^^       ^^^^^^^^
+#                   target              name
+```
+
+Services are:
+- **Workspace-scoped**: Only accessible within your workspace
+- **Name-based**: Access by name, not IP or port
+- **Stable**: Same service always maps to the same local port
+- **Private by default**: Not accessible outside your workspace unless explicitly shared
+
+---
+
+## Data Flow
+
+Here's how traffic flows when Agent B reaches a service exposed by Agent A:
+
+```
+┌─────────────────┐                              ┌─────────────────┐
+│   Agent A       │                              │   Agent B       │
+│   (Exposing)    │                              │   (Reaching)    │
+│                 │      ┌──────────────┐        │                 │
+│  localhost:5432 │◀────▶│     Hub      │◀──────▶│  localhost:5432 │
+│                 │      │              │        │                 │
+└─────────────────┘      │  Metadata    │        └─────────────────┘
+                         │  + Relay     │
+                         └──────────────┘
+```
+
+### Step-by-Step Flow
+
+<Steps>
+  <Step title="Service Discovery">
+    Agent B queries the Hub: "Where is prod-db?"
+    
+    Hub responds: "Agent A is exposing prod-db at localhost:5432"
+  </Step>
+  
+  <Step title="Tunnel Establishment">
+    Agent B creates a local listener on localhost:5432
+    
+    Agent B opens a WebSocket tunnel to the Hub, tagged for Agent A
+  </Step>
+  
+  <Step title="Data Transfer">
+    Client connects to localhost:5432 on Agent B's machine
+    
+    Agent B base64-encodes packets and sends to Hub
+    
+    Hub relays packets to Agent A without inspection
+    
+    Agent A decodes packets and forwards to localhost:5432
+    
+    Responses flow back the same way
+  </Step>
+</Steps>
+
+<Warning>
+  If Agent A disconnects, the tunnel breaks. Active connections will fail and Agent B will attempt to reconnect with exponential backoff.
+</Warning>
+
+---
+
+## What the Hub Sees
+
+| Data | Visibility | Notes |
+|------|------------|-------|
+| Agent identity | ✓ Visible | Agent ID, label, workspace |
+| Service names | ✓ Visible | e.g., "prod-db", "redis" |
+| Target host:port | ✓ Visible | e.g., "localhost:5432" |
+| Connection metadata | ✓ Visible | When connections are made, duration |
+| IP addresses | ✓ Visible | For audit logging (masked in logs) |
+| **Payload data** | **Opaque relay** | Base64-encoded, not inspected |
+
+### Payload Handling
+
+When data flows through the Hub:
+
+1. Agent B sends data as base64-encoded packets
+2. Hub forwards packets to Agent A **without inspection**
+3. Agent A decodes and forwards to the target service
+4. Responses flow back the same way
+
+The Hub does not:
+- Decrypt or inspect payload contents
+- Store payload data
+- Log payload contents
+
+---
+
+## Workspace Isolation
+
+Every resource belongs to exactly one **workspace**:
+
+```
+Workspace
+├── Agents (machines running the connect CLI)
+├── Services (exposed endpoints)
+├── API Keys (for programmatic access)
+└── Shares (environment sharing codes)
+```
+
+### Isolation Guarantees
+
+<AccordionGroup>
+  <Accordion title="Database-level">
+    PostgreSQL Row Level Security (RLS) enforces workspace isolation at the database layer. All workspace-scoped tables have RLS policies that only allow access to rows matching the current workspace context.
+  </Accordion>
+  
+  <Accordion title="Application-level">
+    All queries are additionally scoped by `workspaceId` in the application code (defense-in-depth).
+  </Accordion>
+  
+  <Accordion title="API-level">
+    Guards validate workspace ownership before any operation.
+  </Accordion>
+  
+  <Accordion title="Realtime-level">
+    WebSocket rooms are isolated by workspace (`workspace:{id}`).
+  </Accordion>
+  
+  <Accordion title="Agent-level">
+    Agents can only access services within their workspace.
+  </Accordion>
+</AccordionGroup>
+
+### Who Can Access My Services?
+
+**Only authenticated members of your workspace.** By default, exposed services are completely private.
+
+```bash
+# On your server (workspace: acme-corp)
+connect up
+connect expose localhost:5432 --name prod-db
+
+# On your laptop (same workspace: acme-corp)  
+connect up
+connect reach prod-db          # ✓ Works
+
+# Random person (different workspace)
+connect reach prod-db          # ❌ "Service not found"
+```
+
+Outsiders cannot:
+- Discover that your services exist
+- List services in your workspace
+- Connect to any of your services
+
+<Tip>
+  The workspace IS the access boundary — think of it like a private Tailnet in Tailscale.
+</Tip>
+
+---
+
+## Cross-Workspace Access
+
+Services can be shared across workspace boundaries via:
+
+### Service Shares
+
+Token-based access with permissions:
+
+```bash
+connect share --expires 7d --name "acme-contractor"
+# → Share code: p4r7n3r
+```
+
+Features:
+- Time-limited access
+- Instant revocation
+- Audit logging
+- Per-service permissions
+
+### Public Links
+
+Time-limited URLs with configurable restrictions:
+
+```bash
+connect link api --expires 30d --methods GET --paths /api/v1
+# → https://abc123xyz.privateconnect.co
+```
+
+Features:
+- No authentication required
+- Rate limiting
+- Method and path restrictions
+- Automatic expiration
+
+<Warning>
+  Both methods are **opt-in** and create audit logs. Services remain private unless explicitly shared.
+</Warning>
+
+---
+
+## Encryption
+
+### In Transit
+
+| Connection | Encryption |
+|------------|------------|
+| Agent ↔ Hub | TLS 1.2+ required (enforced for non-localhost) |
+| Hub ↔ Database | TLS (when using managed PostgreSQL) |
+| Web UI ↔ API | HTTPS |
+
+<Note>
+  HTTPS enforcement can be bypassed for local development only:
+  ```bash
+  CONNECT_ALLOW_INSECURE=true connect up --hub http://localhost:3001
+  ```
+</Note>
+
+### At Rest
+
+- **Database**: Encryption depends on your PostgreSQL provider
+- **Hosted version**: Uses Railway's managed PostgreSQL with encryption at rest
+- **Self-hosted**: Configure your database provider's encryption settings
+
+### End-to-End Encryption (Future)
+
+Currently, payload data passes through the Hub as an opaque relay. For environments requiring zero-knowledge relay, we're considering optional agent-to-agent encryption where:
+
+- Agents negotiate keys directly
+- Hub relays encrypted packets it cannot read
+- Perfect forward secrecy via ephemeral keys
+
+---
+
+## Deployment Options
+
+<Tabs>
+  <Tab title="Hosted (Default)">
+    The production Hub at `api.privateconnect.co` runs on:
+    
+    | Component | Provider | Region |
+    |-----------|----------|--------|
+    | API Server | Railway | US (Oregon) |
+    | Database | Railway PostgreSQL | US (Oregon) |
+    | Web Frontend | Railway | US (Oregon) |
+    
+    **Data Residency:**
+    - All data resides in US (Oregon) region
+    - No data replication to other regions
+    - For EU data residency requirements, self-host in your preferred region
+  </Tab>
+  
+  <Tab title="Self-Hosted">
+    Private Connect can be fully self-hosted for:
+    - Data residency requirements
+    - Air-gapped environments
+    - Custom security policies
+    - Compliance requirements
+    
+    ```bash
+    # Clone the repository
+    git clone https://github.com/treadiehq/private-connect.git
+    cd private-connect
+    
+    # Start with Docker Compose
+    docker compose up -d
+    
+    # Or run components separately
+    cd apps/api && pnpm install && pnpm start
+    cd apps/web && pnpm install && pnpm dev
+    ```
+    
+    **Point agents to your hub:**
+    ```bash
+    # Via CLI flag
+    connect up --hub https://hub.yourcompany.com
+    
+    # Via environment variable
+    export CONNECT_HUB_URL=https://hub.yourcompany.com
+    connect up
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Agent Features
+
+### Stable Port Mapping
+
+The same service always gets the same local port across restarts:
+
+```bash
+# First time
+connect reach prod-db
+# → localhost:5432
+
+# After restart
+connect reach prod-db
+# → localhost:5432 (same port)
+```
+
+Port mappings are stored locally in `~/.connect/ports.json`.
+
+### Always-On Mode
+
+Run as a daemon for persistent connections:
+
+```bash
+# Install daemon (systemd/launchd)
+connect daemon install
+
+# Services stay connected across reboots
+connect expose localhost:5432 --name prod-db
+```
+
+### Health Checks
+
+Agents report health and connectivity:
+
+```bash
+connect reach grafana --check
+# ✓ DNS OK
+# ✓ TCP OK  
+# ✓ TLS OK
+# ✓ HTTP 200 OK
+# ✓ Latency: 45ms
+```
+
+### Auto-Discovery
+
+Agents can auto-name services based on port:
+
+```bash
+connect localhost:5432    # Auto-named "postgres"
+connect localhost:6379    # Auto-named "redis"
+connect localhost:3306    # Auto-named "mysql"
+```
+
+---
+
+## Multi-Region Support (Future)
+
+Currently, agents connect to a single Hub. Multi-region Hub federation is on the roadmap for:
+
+- High availability deployments
+- Reduced latency by connecting to nearest Hub
+- Automatic failover between regions
+- Cross-region service access
+
+---
+
+## Performance Characteristics
+
+### Latency
+
+- **Hub overhead**: ~1-2ms per request for relay
+- **Total latency**: Hub overhead + network distance to Hub + network distance from Hub
+- **Debug mode**: Additional ~1-2ms for packet capture
+
+### Throughput
+
+- Limited by WebSocket connection bandwidth
+- Typical throughput: 100+ MB/s for sustained transfers
+- No artificial rate limiting at the Hub level
+
+### Connection Limits
+
+- No hard limit on number of services per workspace
+- No hard limit on concurrent tunnels
+- Rate limiting recommended at load balancer level for self-hosted deployments
+
+---
+
+## High Availability
+
+### What Happens if the Hub Goes Down?
+
+- Existing TCP connections through the Hub will fail
+- Agents will attempt to reconnect with exponential backoff
+- No data is lost—the Hub doesn't store payload data
+- Service metadata is persisted in the database
+
+### Recommendations for Production
+
+<Steps>
+  <Step title="Database Backups">
+    Configure automated backups for your PostgreSQL database
+  </Step>
+  
+  <Step title="Health Monitoring">
+    Set up monitoring and alerting for Hub availability
+  </Step>
+  
+  <Step title="Load Balancing">
+    Run multiple Hub instances behind a load balancer (self-hosted)
+  </Step>
+  
+  <Step title="Rate Limiting">
+    Configure rate limiting at the load balancer level
+  </Step>
+</Steps>
+
+---
+
+## Open Source
+
+The entire stack is open source under FSL-1.1-MIT license:
+
+- **Agent**: Go binary, built with Cobra CLI framework
+- **API Server**: NestJS (TypeScript), PostgreSQL, WebSockets
+- **Web UI**: Next.js, React, Tailwind CSS
+- **SDK**: TypeScript library for programmatic access
+
+<Card title="GitHub Repository" icon="github" href="https://github.com/treadiehq/private-connect">
+  View the source code, contribute, or self-host
+</Card>

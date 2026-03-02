@@ -1,0 +1,871 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for Private Connect
+icon: screwdriver-wrench
+---
+
+Quick solutions to common problems you might encounter while using Private Connect.
+
+## Connection Issues
+
+<AccordionGroup>
+  <Accordion title="Agent won't connect to Hub">
+    **Symptoms:**
+    - `connect up` hangs or times out
+    - Error: "Failed to connect to Hub"
+    - WebSocket connection errors
+    
+    **Solutions:**
+    
+    1. **Check Hub URL**
+       ```bash
+       # Verify you're using the correct Hub URL
+       connect up --hub https://api.privateconnect.co
+       
+       # Or set environment variable
+       export CONNECT_HUB_URL=https://api.privateconnect.co
+       connect up
+       ```
+    
+    2. **Check network connectivity**
+       ```bash
+       # Test if Hub is reachable
+       curl https://api.privateconnect.co/health
+       
+       # Should return: {"status":"ok"}
+       ```
+    
+    3. **Check firewall/proxy settings**
+       - Ensure outbound HTTPS (443) is allowed
+       - WebSocket connections must be permitted
+       - Corporate proxies may block WebSocket traffic
+    
+    4. **Try with verbose logging**
+       ```bash
+       connect up --verbose
+       # Check logs for specific error messages
+       ```
+    
+    5. **Check for expired token**
+       ```bash
+       # Rotate token if expired
+       connect up --rotate-token
+       ```
+  </Accordion>
+  
+  <Accordion title="Service not found">
+    **Symptoms:**
+    - Error: "Service 'prod-db' not found"
+    - `connect reach` fails to find service
+    
+    **Solutions:**
+    
+    1. **List available services**
+       ```bash
+       connect ls
+       # Shows all services in your workspace
+       ```
+    
+    2. **Check service name**
+       ```bash
+       # Service names are case-sensitive
+       connect reach prod-db     # ✓ Correct
+       connect reach Prod-DB     # ❌ Wrong case
+       ```
+    
+    3. **Verify workspace**
+       ```bash
+       # Ensure you're in the same workspace as the service
+       connect status
+       # Check "Workspace" field
+       ```
+    
+    4. **Check if exposing agent is online**
+       ```bash
+       # The agent exposing the service must be running
+       connect ls --verbose
+       # Shows which agent is exposing each service
+       ```
+    
+    5. **Re-expose the service**
+       ```bash
+       # On the machine with the service
+       connect expose localhost:5432 --name prod-db
+       ```
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    **Symptoms:**
+    - Error: "Port 5432 is already in use"
+    - `connect reach` fails to create tunnel
+    
+    **Solutions:**
+    
+    1. **Use a different local port**
+       ```bash
+       connect reach prod-db --port 5433
+       # Access at localhost:5433 instead
+       ```
+    
+    2. **Find what's using the port**
+       ```bash
+       # On macOS/Linux
+       lsof -i :5432
+       
+       # On Windows
+       netstat -ano | findstr :5432
+       ```
+    
+    3. **Stop the conflicting service**
+       ```bash
+       # Example: stop local PostgreSQL
+       brew services stop postgresql
+       # or
+       sudo systemctl stop postgresql
+       ```
+    
+    4. **Clear port mapping**
+       ```bash
+       # Remove saved port mapping
+       connect map --clear prod-db
+       # Next connection will try a different port
+       ```
+  </Accordion>
+  
+  <Accordion title="Connection keeps dropping">
+    **Symptoms:**
+    - Tunnel disconnects frequently
+    - "Connection reset by peer" errors
+    - Intermittent connectivity
+    
+    **Solutions:**
+    
+    1. **Check network stability**
+       ```bash
+       # Test latency and packet loss
+       ping -c 10 api.privateconnect.co
+       ```
+    
+    2. **Use daemon mode for persistence**
+       ```bash
+       # Install as system service
+       connect daemon install
+       
+       # Daemon auto-reconnects on disconnect
+       ```
+    
+    3. **Check for token expiry**
+       ```bash
+       connect status
+       # Look for "Token expires in" warning
+       
+       # Rotate if expiring soon
+       connect up --rotate-token
+       ```
+    
+    4. **Increase timeout settings**
+       ```bash
+       # Set longer timeouts (self-hosted only)
+       export CONNECT_TIMEOUT=60000  # 60 seconds
+       connect up
+       ```
+    
+    5. **Check Hub status**
+       ```bash
+       # For hosted version, check status page
+       curl https://api.privateconnect.co/health
+       ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Authentication Issues
+
+<AccordionGroup>
+  <Accordion title="Login not working">
+    **Symptoms:**
+    - Browser doesn't open for login
+    - Magic link email not received
+    - Error: "Authentication failed"
+    
+    **Solutions:**
+    
+    1. **Use device code flow**
+       ```bash
+       # For headless servers
+       connect up --device
+       # Enter code from any device at the provided URL
+       ```
+    
+    2. **Check email spam folder**
+       - Magic link emails may be filtered
+       - Add noreply@privateconnect.co to contacts
+    
+    3. **Try different browser**
+       ```bash
+       # Specify browser
+       BROWSER=firefox connect up
+       ```
+    
+    4. **Use API key instead**
+       ```bash
+       # Generate API key from web UI
+       connect up --api-key pc_xxxxxxxxxxxxx
+       ```
+    
+    5. **Clear saved credentials**
+       ```bash
+       # Remove old auth data
+       rm -rf ~/.connect/auth.json
+       connect up
+       ```
+  </Accordion>
+  
+  <Accordion title="Token expired">
+    **Symptoms:**
+    - Error: "Token has expired"
+    - Agent won't authenticate
+    - 401 Unauthorized errors
+    
+    **Solutions:**
+    
+    1. **Rotate token**
+       ```bash
+       connect up --rotate-token
+       # Generates new token, invalidates old one
+       ```
+    
+    2. **Log in again**
+       ```bash
+       # Re-authenticate from scratch
+       rm -rf ~/.connect/auth.json
+       connect up
+       ```
+    
+    3. **Set up token rotation reminders**
+       ```bash
+       # Check token status regularly
+       connect status
+       # Shows "Token expires in X days"
+       ```
+  </Accordion>
+  
+  <Accordion title="Permission denied">
+    **Symptoms:**
+    - Error: "Permission denied"
+    - Cannot expose services
+    - Cannot create shares
+    
+    **Solutions:**
+    
+    1. **Check workspace membership**
+       ```bash
+       connect status
+       # Verify you're in the correct workspace
+       ```
+    
+    2. **Use API key with correct permissions**
+       ```bash
+       # API keys inherit workspace permissions
+       # Generate new key from web UI if needed
+       ```
+    
+    3. **Contact workspace admin**
+       - Only workspace members can expose services
+       - Admin can invite you from the web UI
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Service Exposure Issues
+
+<AccordionGroup>
+  <Accordion title="Cannot expose service">
+    **Symptoms:**
+    - `connect expose` fails
+    - Service not appearing in `connect ls`
+    - Error: "Failed to expose service"
+    
+    **Solutions:**
+    
+    1. **Verify target is reachable**
+       ```bash
+       # Test if service is listening
+       nc -zv localhost 5432
+       # Or
+       telnet localhost 5432
+       ```
+    
+    2. **Check service is actually running**
+       ```bash
+       # Example: PostgreSQL
+       pg_isready -h localhost -p 5432
+       
+       # Example: Redis
+       redis-cli -p 6379 ping
+       ```
+    
+    3. **Use explicit name**
+       ```bash
+       # Sometimes auto-naming fails
+       connect expose localhost:5432 --name my-db
+       ```
+    
+    4. **Check for duplicate names**
+       ```bash
+       # List existing services
+       connect ls
+       
+       # Delete old service if needed
+       connect delete old-service
+       ```
+    
+    5. **Verify agent is connected**
+       ```bash
+       connect status
+       # Should show "Connected: yes"
+       ```
+  </Accordion>
+  
+  <Accordion title="Service shows offline">
+    **Symptoms:**
+    - Service listed but marked as offline
+    - Cannot reach service
+    - Health check fails
+    
+    **Solutions:**
+    
+    1. **Check exposing agent**
+       ```bash
+       # Agent must be running on the machine with the service
+       connect status  # On the exposing machine
+       ```
+    
+    2. **Restart agent**
+       ```bash
+       # If using daemon
+       connect daemon restart
+       
+       # If running manually
+       # Stop (Ctrl+C) and restart
+       connect up
+       ```
+    
+    3. **Re-expose service**
+       ```bash
+       connect expose localhost:5432 --name prod-db
+       ```
+    
+    4. **Check target service health**
+       ```bash
+       # Ensure the actual service is running
+       systemctl status postgresql  # Example
+       ```
+  </Accordion>
+  
+  <Accordion title="Public URL not working">
+    **Symptoms:**
+    - `connect expose --public` creates URL but it doesn't work
+    - 502 Bad Gateway errors
+    - URL times out
+    
+    **Solutions:**
+    
+    1. **Verify service is exposed**
+       ```bash
+       connect ls
+       # Should show your service with public URL
+       ```
+    
+    2. **Check if agent is running**
+       ```bash
+       # Agent must stay running for public URLs
+       connect status
+       ```
+    
+    3. **Test local access first**
+       ```bash
+       # Ensure service works locally
+       curl http://localhost:3000
+       ```
+    
+    4. **Check service bindings**
+       ```bash
+       # Service must bind to 127.0.0.1 or 0.0.0.0
+       # NOT just localhost (IPv6)
+       netstat -tuln | grep 3000
+       ```
+    
+    5. **Try temporary tunnel**
+       ```bash
+       # For quick testing without auth
+       npx private-connect tunnel 3000
+       ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Sharing & Collaboration Issues
+
+<AccordionGroup>
+  <Accordion title="Share code not working">
+    **Symptoms:**
+    - `connect join` fails with invalid code
+    - Error: "Share not found"
+    - Share code expired
+    
+    **Solutions:**
+    
+    1. **Check code validity**
+       ```bash
+       # Codes are case-sensitive
+       connect join x7k9m2    # ✓ Correct
+       connect join X7K9M2    # ❌ Wrong case
+       ```
+    
+    2. **Verify expiration**
+       ```bash
+       # Shares can expire
+       # Creator should check from web UI or:
+       connect share --list
+       ```
+    
+    3. **Create new share**
+       ```bash
+       # If expired, create new one
+       connect share --expires 7d
+       ```
+    
+    4. **Check workspace access**
+       - Both parties must have access to workspace
+       - Or use `connect link` for external access
+  </Accordion>
+  
+  <Accordion title="Cannot clone teammate environment">
+    **Symptoms:**
+    - `connect clone` shows no teammates
+    - Error: "No teammates found"
+    - Clone succeeds but no services appear
+    
+    **Solutions:**
+    
+    1. **List available teammates**
+       ```bash
+       connect clone --list
+       # Shows agents in your workspace
+       ```
+    
+    2. **Ensure teammate has exposed services**
+       ```bash
+       # Teammate must have services exposed
+       # Ask them to run: connect ls
+       ```
+    
+    3. **Use share code instead**
+       ```bash
+       # More reliable for collaboration
+       # Creator: connect share
+       # You: connect join <code>
+       ```
+    
+    4. **Verify same workspace**
+       ```bash
+       connect status
+       # Both must be in same workspace
+       ```
+  </Accordion>
+  
+  <Accordion title="Public link access denied">
+    **Symptoms:**
+    - 403 Forbidden on public link
+    - Rate limit exceeded
+    - Method not allowed
+    
+    **Solutions:**
+    
+    1. **Check allowed methods**
+       ```bash
+       # Link may restrict HTTP methods
+       # If link allows only GET, POST won't work
+       ```
+    
+    2. **Check allowed paths**
+       ```bash
+       # Link may restrict paths
+       # /api/admin may be blocked
+       # /api/public may be allowed
+       ```
+    
+    3. **Check rate limit**
+       ```bash
+       # Wait a minute if rate limited
+       # Or creator can increase limit:
+       connect link api --rate-limit 200
+       ```
+    
+    4. **Verify link not revoked**
+       - Creator may have revoked access
+       - Check web UI for active links
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Debug Mode Issues
+
+<AccordionGroup>
+  <Accordion title="No packets showing in debug viewer">
+    **Symptoms:**
+    - Debug viewer shows no traffic
+    - Packets not being captured
+    - Empty packet list
+    
+    **Solutions:**
+    
+    1. **Verify debug mode is enabled**
+       ```bash
+       # Must use --debug flag
+       connect expose localhost:3000 --debug
+       ```
+    
+    2. **Check traffic is flowing**
+       ```bash
+       # Send test request
+       curl http://localhost:3000
+       # Should appear in debug viewer
+       ```
+    
+    3. **Refresh debug viewer**
+       - Refresh browser page
+       - Check WebSocket connection status
+    
+    4. **Check browser console**
+       - Open DevTools → Console
+       - Look for WebSocket errors
+    
+    5. **Verify session is active**
+       ```bash
+       # Agent must be running
+       # Debug session ends when agent stops
+       connect status
+       ```
+  </Accordion>
+  
+  <Accordion title="AI not working in debug viewer">
+    **Symptoms:**
+    - AI copilot not responding
+    - Error: "AI not configured"
+    - API errors
+    
+    **Solutions:**
+    
+    1. **Configure AI provider**
+       - Go to Settings → AI Copilot in web UI
+       - Choose provider (Ollama, OpenAI, Anthropic)
+       - Enter API key
+       - Click "Test Connection"
+    
+    2. **Check API credits**
+       - For OpenAI/Anthropic, verify you have API credits
+       - Check provider dashboard
+    
+    3. **Verify Ollama is running**
+       ```bash
+       # For local Ollama
+       ollama serve
+       # In another terminal:
+       ollama pull llama2  # or your preferred model
+       ```
+    
+    4. **Try different provider**
+       - If one provider fails, try another
+       - Ollama is best for privacy-sensitive data
+  </Accordion>
+  
+  <Accordion title="Debug session expired">
+    **Symptoms:**
+    - Error: "Session expired"
+    - Cannot view debug history
+    - Old sessions not accessible
+    
+    **Solutions:**
+    
+    1. **Restart debug session**
+       ```bash
+       # Debug sessions are tied to agent lifecycle
+       connect expose localhost:3000 --debug
+       ```
+    
+    2. **Export before stopping**
+       - Export session as JSON or Markdown before stopping agent
+       - Use "Export" button in debug viewer
+    
+    3. **Keep agent running**
+       ```bash
+       # Use daemon mode for persistent sessions
+       connect daemon install
+       connect expose localhost:3000 --debug
+       ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Installation Issues
+
+<AccordionGroup>
+  <Accordion title="Install script fails">
+    **Symptoms:**
+    - `curl -fsSL ... | bash` fails
+    - Permission denied errors
+    - Binary not found after install
+    
+    **Solutions:**
+    
+    1. **Check system requirements**
+       - macOS 10.15+, Linux (x64/arm64), Windows (WSL)
+       - curl must be installed
+    
+    2. **Manual installation**
+       ```bash
+       # Download binary directly
+       curl -Lo connect https://privateconnect.co/download/latest/linux-x64
+       chmod +x connect
+       sudo mv connect /usr/local/bin/
+       ```
+    
+    3. **Use package managers**
+       ```bash
+       # Homebrew (macOS)
+       brew install treadiehq/tap/private-connect
+       
+       # Coming soon: apt, yum, scoop
+       ```
+    
+    4. **Build from source**
+       ```bash
+       git clone https://github.com/treadiehq/private-connect.git
+       cd private-connect
+       pnpm install
+       cd apps/agent && pnpm run build:binary
+       ```
+  </Accordion>
+  
+  <Accordion title="Binary won't run">
+    **Symptoms:**
+    - "Permission denied" when running connect
+    - "Command not found: connect"
+    - Binary fails to execute
+    
+    **Solutions:**
+    
+    1. **Make executable**
+       ```bash
+       chmod +x /usr/local/bin/connect
+       ```
+    
+    2. **Check PATH**
+       ```bash
+       # Ensure /usr/local/bin is in PATH
+       echo $PATH | grep /usr/local/bin
+       
+       # Add to PATH if missing
+       export PATH="/usr/local/bin:$PATH"
+       # Add to ~/.bashrc or ~/.zshrc
+       ```
+    
+    3. **Try absolute path**
+       ```bash
+       /usr/local/bin/connect up
+       ```
+    
+    4. **Check architecture**
+       ```bash
+       # Verify binary matches your system
+       uname -m    # x86_64 or arm64
+       file /usr/local/bin/connect
+       ```
+  </Accordion>
+  
+  <Accordion title="Daemon installation fails">
+    **Symptoms:**
+    - `connect daemon install` fails
+    - Systemd/launchd errors
+    - Service won't start on boot
+    
+    **Solutions:**
+    
+    1. **Check permissions**
+       ```bash
+       # May need sudo for system-wide install
+       sudo connect daemon install
+       ```
+    
+    2. **Verify init system**
+       ```bash
+       # Linux: check if systemd is available
+       systemctl --version
+       
+       # macOS: launchd is default
+       launchctl version
+       ```
+    
+    3. **Check logs**
+       ```bash
+       # Linux (systemd)
+       sudo journalctl -u private-connect
+       
+       # macOS (launchd)
+       tail -f ~/Library/Logs/private-connect.log
+       ```
+    
+    4. **Manual service file**
+       ```bash
+       # Create systemd service manually
+       sudo nano /etc/systemd/system/private-connect.service
+       # Add service configuration
+       sudo systemctl daemon-reload
+       sudo systemctl enable private-connect
+       sudo systemctl start private-connect
+       ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Slow connection speeds">
+    **Symptoms:**
+    - High latency through tunnel
+    - Slow database queries
+    - Timeouts on large transfers
+    
+    **Solutions:**
+    
+    1. **Check network latency**
+       ```bash
+       # Test latency to Hub
+       ping api.privateconnect.co
+       
+       # Test connection speed
+       connect reach prod-db --check
+       # Shows latency measurement
+       ```
+    
+    2. **Use regional Hub** (self-hosted)
+       ```bash
+       # Deploy Hub closer to your agents
+       connect up --hub https://eu.yourdomain.com
+       ```
+    
+    3. **Disable debug mode**
+       ```bash
+       # Debug adds ~1-2ms overhead per request
+       # Don't use --debug in production
+       connect expose localhost:3000  # Without --debug
+       ```
+    
+    4. **Check for network issues**
+       ```bash
+       # Test for packet loss
+       ping -c 100 api.privateconnect.co
+       # Should be 0% packet loss
+       ```
+  </Accordion>
+  
+  <Accordion title="High CPU/memory usage">
+    **Symptoms:**
+    - Agent using excessive resources
+    - System slowdown
+    - Memory leaks
+    
+    **Solutions:**
+    
+    1. **Check version**
+       ```bash
+       connect version
+       # Update to latest version
+       curl -fsSL https://privateconnect.co/install.sh | bash
+       ```
+    
+    2. **Reduce concurrent connections**
+       ```bash
+       # Limit number of active tunnels
+       # Close unused connections
+       connect ls
+       connect disconnect <service>
+       ```
+    
+    3. **Monitor resource usage**
+       ```bash
+       # Check agent process
+       ps aux | grep connect
+       top -p $(pgrep connect)
+       ```
+    
+    4. **Restart agent**
+       ```bash
+       # If using daemon
+       connect daemon restart
+       ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Getting Help
+
+If you're still experiencing issues:
+
+<CardGroup cols={3}>
+  <Card title="Documentation" icon="book" href="/essentials/getting-started">
+    Read the full documentation
+  </Card>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/KqdBcqRk5E">
+    Ask questions in Discord
+  </Card>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/treadiehq/private-connect/issues">
+    Report bugs or request features
+  </Card>
+</CardGroup>
+
+### Provide Debug Information
+
+When asking for help, include:
+
+```bash
+# System info
+connect version
+uname -a
+
+# Connection status
+connect status
+
+# Service list
+connect ls
+
+# Recent logs (if applicable)
+connect daemon logs
+```
+
+---
+
+## Common Error Messages
+
+| Error | Meaning | Solution |
+|-------|---------|----------|
+| `Service not found` | Service doesn't exist or wrong workspace | Check `connect ls`, verify workspace |
+| `Port already in use` | Local port is occupied | Use `--port` flag or stop conflicting service |
+| `Token expired` | Agent token needs rotation | Run `connect up --rotate-token` |
+| `Permission denied` | Not authorized for action | Check workspace membership, use API key |
+| `Connection refused` | Cannot reach target service | Verify service is running locally |
+| `WebSocket error` | Cannot connect to Hub | Check network, firewall, Hub status |
+| `Authentication failed` | Login issue | Use `--device` flag or API key |
+| `Share not found` | Invalid or expired share code | Get new share code from creator |
+| `Rate limit exceeded` | Too many requests to public link | Wait or contact link creator to increase limit |
+| `Hub unreachable` | Network or Hub issue | Check `curl https://api.privateconnect.co/health` |

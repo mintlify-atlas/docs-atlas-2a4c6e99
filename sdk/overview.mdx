@@ -1,0 +1,157 @@
+---
+title: 'SDK Overview'
+description: 'Programmatic access to Private Connect services and agent orchestration'
+---
+
+The Private Connect SDK provides a TypeScript/JavaScript client for programmatic access to your Private Connect infrastructure. Use it to connect to services, orchestrate agents, and build distributed systems.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @privateconnect/sdk
+```
+
+```bash yarn
+yarn add @privateconnect/sdk
+```
+
+```bash pnpm
+pnpm add @privateconnect/sdk
+```
+</CodeGroup>
+
+## Quick Start
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: 'your-api-key' });
+
+// Connect to a service
+const db = await pc.connect('postgres-prod');
+console.log(db.connectionString); // postgres://localhost:5432/...
+
+// List all agents
+const agents = await pc.agents.list();
+
+// Send message to another agent
+await pc.agents.sendMessage(targetAgentId, { action: 'deploy' });
+```
+
+## Core Concepts
+
+### Services
+
+Connect to databases, APIs, and other network services exposed through your Private Connect infrastructure. The SDK automatically provides connection strings and ports.
+
+### Agents
+
+Discover and communicate with agents in your workspace. Agents can register capabilities, send messages, and coordinate distributed workflows.
+
+### Sessions
+
+Create ephemeral orchestration sessions for coordinating multi-agent workflows with automatic cleanup and TTL.
+
+## API Structure
+
+The SDK is organized into three main API namespaces:
+
+<CardGroup cols={3}>
+  <Card title="Agents API" icon="robot" href="/sdk/agents-api">
+    Discovery, messaging, and orchestration
+  </Card>
+  
+  <Card title="Services API" icon="server" href="/sdk/services-api">
+    Service discovery and connection details
+  </Card>
+  
+  <Card title="Sessions API" icon="clock" href="/sdk/sessions-api">
+    Ephemeral orchestration sessions
+  </Card>
+</CardGroup>
+
+## Configuration
+
+<ParamField path="apiKey" type="string" required>
+  Your Private Connect API key. Get this from your workspace settings.
+</ParamField>
+
+<ParamField path="hubUrl" type="string" default="https://api.privateconnect.co">
+  Hub URL for Private Connect API. Override for self-hosted deployments.
+</ParamField>
+
+<ParamField path="agentId" type="string">
+  Agent ID for this client. Auto-detected from local config if not provided.
+</ParamField>
+
+<ParamField path="disableTracking" type="boolean" default={false}>
+  Disable anonymous usage tracking.
+</ParamField>
+
+## Environment Variables
+
+You can configure the SDK using environment variables:
+
+```bash
+export PRIVATECONNECT_API_KEY="your-api-key"
+```
+
+Then use the convenience function:
+
+```typescript
+import { connect } from '@privateconnect/sdk';
+
+const db = await connect('postgres-prod');
+```
+
+## TypeScript Support
+
+The SDK is written in TypeScript and provides full type definitions for all methods, parameters, and return types.
+
+```typescript
+import { 
+  PrivateConnect, 
+  Agent, 
+  Service, 
+  Connection,
+  Message,
+  Session 
+} from '@privateconnect/sdk';
+```
+
+See [TypeScript Setup](/sdk/typescript) for detailed type information.
+
+## Error Handling
+
+The SDK throws errors for failed requests:
+
+```typescript
+try {
+  const db = await pc.connect('my-database');
+} catch (error) {
+  console.error('Failed to connect:', error.message);
+}
+```
+
+All API methods return promises and should be used with `async/await` or `.then()/.catch()`.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="TypeScript Setup" icon="code" href="/sdk/typescript">
+    Configure TypeScript and explore type definitions
+  </Card>
+  
+  <Card title="Agents API" icon="robot" href="/sdk/agents-api">
+    Build distributed agent systems
+  </Card>
+  
+  <Card title="Services API" icon="server" href="/sdk/services-api">
+    Connect to your infrastructure
+  </Card>
+  
+  <Card title="Sessions API" icon="clock" href="/sdk/sessions-api">
+    Coordinate multi-agent workflows
+  </Card>
+</CardGroup>

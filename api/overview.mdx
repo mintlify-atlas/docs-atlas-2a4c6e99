@@ -1,0 +1,168 @@
+---
+title: 'API Overview'
+description: 'Introduction to the Private Connect API'
+---
+
+## Overview
+
+The Private Connect Control API provides programmatic access to tunnel management, agent orchestration, and service connectivity. Use the API to automate infrastructure operations, integrate with CI/CD pipelines, and build custom tooling.
+
+## Base URL
+
+All API requests should be made to:
+
+```
+https://api.privateconnect.co
+```
+
+For local development:
+
+```
+http://localhost:3001
+```
+
+## Versioning
+
+All endpoints are prefixed with `/v1/`. Future breaking changes will use `/v2/` to maintain backwards compatibility.
+
+**Current version:** `v1.0`
+
+## Request Format
+
+All `POST`, `PATCH`, and `PUT` requests should send JSON data with the `Content-Type` header:
+
+```bash
+Content-Type: application/json
+```
+
+## Response Format
+
+All responses are returned as JSON with appropriate HTTP status codes:
+
+- `200` - Success
+- `201` - Resource created
+- `400` - Bad request (validation error)
+- `401` - Unauthorized (missing or invalid credentials)
+- `403` - Forbidden (valid credentials, insufficient permissions)
+- `404` - Resource not found
+- `429` - Rate limit exceeded
+- `500` - Internal server error
+- `502` - Bad gateway (upstream service error)
+- `503` - Service unavailable
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "data": { ... }
+}
+```
+
+### Error Response
+
+```json
+{
+  "error": "Error type",
+  "message": "Detailed error message",
+  "statusCode": 400
+}
+```
+
+## Rate Limiting
+
+Rate limits are enforced per API key:
+
+- **Public endpoints**: 100 requests/minute
+- **Authenticated endpoints**: 1,000 requests/minute
+- **Share proxying**: 5,000 requests/minute
+
+Rate limit headers are included in responses:
+
+```
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1640000000
+```
+
+When rate limited, you'll receive a `429 Too Many Requests` response:
+
+```json
+{
+  "error": "Too many requests",
+  "message": "Please wait before trying again",
+  "retryAfter": 60
+}
+```
+
+## Interactive Documentation
+
+Explore and test the API interactively using Swagger UI:
+
+```
+https://api.privateconnect.co/docs
+```
+
+Download the OpenAPI specification:
+
+```
+https://api.privateconnect.co/openapi.json
+```
+
+## API Resource Groups
+
+<CardGroup cols={2}>
+  <Card title="Agents" icon="robot" href="/api/agents">
+    Register agents, manage capabilities, and send commands
+  </Card>
+  <Card title="Services" icon="server" href="/api/services">
+    Expose services, run diagnostics, and manage public access
+  </Card>
+  <Card title="Tunnels" icon="tunnel" href="/api/tunnels">
+    Create tunnels, manage connections, and share access
+  </Card>
+  <Card title="Shares" icon="share-nodes" href="/api/shares">
+    Create shareable links with access control and monitoring
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/api/webhooks">
+    Subscribe to events and receive real-time notifications
+  </Card>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Manage API keys and authenticate requests
+  </Card>
+</CardGroup>
+
+## Health Check
+
+Check API status and database connectivity:
+
+```bash
+curl https://api.privateconnect.co/health
+```
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "appReady": true,
+  "dbConnected": true,
+  "timestamp": "2026-03-02T10:00:00.000Z"
+}
+```
+
+## Getting Started
+
+1. **Create an API Key** - Generate an API key from the dashboard at [app.privateconnect.co](https://app.privateconnect.co)
+2. **Authenticate Requests** - Include your API key in the `x-api-key` header
+3. **Register an Agent** - Use `/v1/agents/provision` to get agent credentials
+4. **Expose a Service** - Use `/v1/services/register` to make a service accessible
+5. **Create a Share** - Use `/v1/services/:id/shares` to generate shareable links
+
+## Support
+
+For API support:
+
+- **Documentation**: [privateconnect.co/docs](https://privateconnect.co/docs)
+- **Status Page**: [status.privateconnect.co](https://status.privateconnect.co)
+- **GitHub Issues**: Report bugs and request features

@@ -1,0 +1,331 @@
+---
+title: connect clone
+description: Clone a teammate's entire development environment
+---
+
+The `connect clone` command replicates a teammate's environment by connecting to all their exposed services simultaneously.
+
+## Usage
+
+```bash
+connect clone <teammate> [options]
+```
+
+## Arguments
+
+<ParamField path="teammate" type="string" required>
+  Agent label or name of the teammate whose environment to clone
+</ParamField>
+
+## Options
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--output" type="string" default=".env.pconnect">
+  Path to write generated environment variables
+</ParamField>
+
+<ParamField path="--no-env" type="boolean" default={false}>
+  Skip .env file generation
+</ParamField>
+
+<ParamField path="--background" type="boolean" default={false}>
+  Run tunnels in background (experimental)
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+## Examples
+
+### Clone a Teammate's Environment
+
+```bash
+connect clone alex
+```
+
+Output:
+```
+🧬 Cloning environment from alex...
+
+  Found alex-macbook's environment:
+
+    ● postgres → localhost:5432
+    ● redis → localhost:6379
+    ● api → localhost:8080
+
+  Connecting to services...
+
+    [ok] postgres → localhost:5432
+    [ok] redis → localhost:6379
+    [ok] api → localhost:8080
+
+[ok] Cloned 3 service(s) from alex-macbook
+
+  Generated: .env.pconnect
+  Use with: source .env.pconnect or copy to your .env
+
+  Connection examples:
+    POSTGRES_URL=localhost:5432
+    REDIS_URL=localhost:6379
+    API_URL=localhost:8080
+
+  Press Ctrl+C to disconnect all services
+```
+
+### Clone with Custom Output
+
+```bash
+connect clone staging-server --output .env.staging
+```
+
+### Clone Without .env File
+
+```bash
+connect clone alex --no-env
+```
+
+### List Available Teammates
+
+```bash
+connect clone --list
+```
+
+Output:
+```
+👥 Teammates with clonable environments
+
+  ● alex-macbook (Alex)
+    Services: 5 (5 online)
+      ● postgres
+      ● redis
+      ● api
+      ... and 2 more
+
+  ● staging-server
+    Services: 3 (2 online)
+      ● mongodb
+      ● queue
+      ○ worker
+
+  Clone with: connect clone <label>
+```
+
+## Behavior
+
+### Environment Discovery
+
+The command searches for agents by:
+1. **Exact label match**: `alex-macbook`
+2. **Exact name match**: `Alex's MacBook`
+3. **Partial label match**: `alex` matches `alex-macbook`
+
+All searches are case-insensitive.
+
+### Service Connection
+
+For each service:
+1. Checks if service is online (has tunnel port)
+2. Attempts to use the service's original port locally
+3. Auto-selects alternative port if conflict exists
+4. Creates TCP tunnel to the service
+5. Registers route in active routes for proxy
+
+### Port Conflict Resolution
+
+```bash
+connect clone alex
+```
+
+Output:
+```
+  Connecting to services...
+
+    [ok] postgres → localhost:15432 (was 5432)
+    [ok] redis → localhost:6379
+    [ok] api → localhost:8080
+```
+
+When a port is unavailable:
+- Searches for next available port (starting at original + 1)
+- Shows both the actual and intended ports
+- Uses the same port consistently across sessions
+
+### Generated .env File
+
+The `.env.pconnect` file contains:
+
+```bash
+# Private Connect - Cloned from alex-macbook
+# Generated at 2024-01-15T10:30:00.000Z
+#
+# Source these variables:
+#   source .env.pconnect
+#
+# Or copy the ones you need to your .env
+
+# postgres
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_URL=localhost:5432
+# POSTGRES_DATABASE_URL=postgres://user:pass@localhost:5432/dbname
+
+# redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_URL=localhost:6379
+# REDIS_REDIS_URL=redis://localhost:6379
+
+# api
+API_HOST=localhost
+API_PORT=8080
+API_URL=localhost:8080
+# API_API_URL=http://localhost:8080
+
+# Re-clone anytime with: connect clone alex-macbook
+```
+
+Service-specific connection string hints are included based on detected service type.
+
+### Shell State Integration
+
+The command updates `~/.privateconnect/shell-state.json` for shell prompt integration:
+
+```json
+{
+  "services": [
+    {"name": "postgres", "port": 5432},
+    {"name": "redis", "port": 6379},
+    {"name": "api", "port": 8080}
+  ],
+  "workingDir": "/Users/alex/project"
+}
+```
+
+## Exit Codes
+
+- `0` - Successfully cloned and disconnected
+- `1` - Teammate not found, network error, or no services available
+
+## Use Cases
+
+### Onboarding
+
+New team member clones the standard dev environment:
+
+```bash
+connect clone staging-env
+source .env.pconnect
+npm run dev
+```
+
+### Debugging Production Issues
+
+Clone production-like environment from teammate:
+
+```bash
+connect clone prod-replica
+psql -h localhost -p 5432 < debug.sql
+```
+
+### Testing Against Real Services
+
+```bash
+connect clone integration-server
+npm run test:integration
+```
+
+### Multi-Service Development
+
+Access entire microservices stack:
+
+```bash
+connect clone backend-services
+# Now you have: api, auth, payments, notifications, etc.
+```
+
+## Related Commands
+
+- [`connect share`](/cli/share) / [`connect join`](/cli/join) - Alternative sharing mechanism
+- [`connect reach`](/cli/reach) - Connect to individual services
+- [`connect dev`](/cli/dev) - Project-based multi-service connection
+
+## Troubleshooting
+
+### Teammate Not Found
+
+```bash
+connect clone alex
+```
+
+Output:
+```
+[x] Could not find teammate "alex"
+
+  Tips:
+    • Use their agent label (shown in their terminal/dashboard)
+    • They might need to be online: connect up
+    • List available teammates: connect clone --list
+```
+
+Check available teammates:
+```bash
+connect clone --list
+```
+
+### No Services Exposed
+
+```bash
+connect clone alex
+```
+
+Output:
+```
+[x] alex has no services exposed
+  They need to expose services first: connect expose <target>
+```
+
+The teammate needs to expose services:
+```bash
+# Teammate runs:
+connect expose localhost:5432 --name postgres
+```
+
+### All Services Offline
+
+```bash
+connect clone alex
+```
+
+Output:
+```
+[x] No services are currently online
+  alex may have disconnected.
+```
+
+The teammate's agent may be:
+- Stopped or disconnected
+- Behind a firewall
+- Restarting
+
+### Port Conflicts
+
+```bash
+connect clone alex
+```
+
+Output:
+```
+  Connecting to services...
+
+    [ok] postgres → localhost:15432 (was 5432)
+    [!] mysql → failed: Port 3306 in use, no alternatives
+    [ok] redis → localhost:6379
+
+  [!] 1 service(s) could not connect (may be offline)
+```
+
+Stop conflicting services or free up ports.

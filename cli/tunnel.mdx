@@ -1,0 +1,254 @@
+---
+title: connect tunnel
+description: Tunneling functionality in Private Connect
+---
+
+Private Connect does not have a separate `connect tunnel` command. Tunneling functionality is built into other commands that create network connections between services.
+
+## Built-In Tunneling
+
+Tunnels are automatically created when you:
+
+### Expose Services
+
+The [`connect expose`](/cli/expose) command creates a tunnel from your local service to the hub:
+
+```bash
+connect expose localhost:5432 --name postgres
+```
+
+This establishes:
+- WebSocket connection to hub
+- Bidirectional data forwarding
+- Automatic reconnection on disconnect
+
+### Reach Services  
+
+The [`connect reach`](/cli/reach) command creates a local tunnel to a remote service:
+
+```bash
+connect reach postgres
+```
+
+This creates:
+- Local TCP server on `localhost`
+- Connection to service through the hub
+- Transparent proxying of all traffic
+
+### Clone Environments
+
+The [`connect clone`](/cli/clone) command creates multiple tunnels at once:
+
+```bash
+connect clone alex
+```
+
+This establishes:
+- One tunnel per service
+- Stable port mappings
+- Concurrent connections
+
+### Dev Mode
+
+The [`connect dev`](/cli/dev) command creates project-based tunnels:
+
+```bash
+connect dev
+```
+
+Reads `pconnect.yml` and creates tunnels for all configured services.
+
+## How Tunneling Works
+
+### TCP Tunneling
+
+For most services (databases, APIs, etc.):
+
+```
+Local App → localhost:5432 → Agent → Hub → Remote Agent → Service
+```
+
+1. Local app connects to `localhost:5432`
+2. Agent forwards to hub via WebSocket
+3. Hub routes to target agent
+4. Target agent connects to actual service
+5. Bidirectional data flow established
+
+### HTTP Tunneling
+
+For HTTP services with public URLs:
+
+```
+External Client → Public URL → Hub → Agent → localhost:3000
+```
+
+1. Request arrives at public URL
+2. Hub forwards via WebSocket to agent
+3. Agent proxies to local service
+4. Response flows back through same path
+
+### UDP Tunneling
+
+For UDP services:
+
+```bash
+connect expose localhost:1194 --name vpn --protocol udp
+```
+
+Datagrams are:
+- Forwarded through WebSocket as discrete messages
+- Tracked per session for response routing
+- Delivered to original sender
+
+## Tunnel Features
+
+### Automatic Reconnection
+
+All tunnels automatically reconnect when:
+- Network connection drops
+- Hub server restarts
+- WebSocket timeout occurs
+
+No user intervention required.
+
+### Port Management
+
+**Stable Ports:**
+- Services consistently map to same local ports
+- Port mappings saved in `~/.privateconnect/port-map.json`
+- Reduces configuration drift
+
+**Auto-Selection:**
+- When preferred port is unavailable
+- Finds next available port
+- Notifies user of port change
+
+### Performance
+
+**Low Latency:**
+- WebSocket connection minimizes overhead
+- Direct binary data transfer
+- No encryption overhead (uses TLS at transport layer)
+
+**High Throughput:**
+- Large responses chunked automatically (>5MB)
+- Streaming support for real-time data
+- Efficient buffer management
+
+### Security
+
+**Transport Security:**
+- TLS encryption for all hub connections
+- Certificate validation enforced
+- HTTPS required for non-localhost hubs
+
+**Authentication:**
+- API key or device authorization required
+- Token-based agent authentication
+- Per-service access control
+
+**Isolation:**
+- Each tunnel is isolated
+- No cross-tunnel data leakage
+- Connection tracking per session
+
+## Tunnel Lifecycle
+
+### Creation
+
+1. **Registration**: Service registered with hub
+2. **WebSocket**: Agent connects to hub
+3. **Dial**: Target connection established
+4. **Ready**: Tunnel active for data transfer
+
+### Active State
+
+- Heartbeat every 15-30 seconds
+- Connection monitoring
+- Error handling and retry
+- Automatic cleanup on disconnect
+
+### Termination
+
+**Graceful:**
+- Ctrl+C sends SIGINT
+- Connections closed cleanly
+- Resources released
+- State files updated
+
+**Forced:**
+- Network failure
+- Process killed
+- Hub disconnect
+- Automatic cleanup on reconnect
+
+## Monitoring Tunnels
+
+### Check Tunnel Status
+
+For exposed services:
+```bash
+connect daemon status
+```
+
+For reached services:
+```bash
+connect proxy status
+```
+
+### View Active Routes
+
+Check `~/.privateconnect/active-routes.json`:
+
+```json
+[
+  {
+    "serviceName": "postgres",
+    "localPort": 5432,
+    "protocol": "tcp"
+  },
+  {
+    "serviceName": "redis",
+    "localPort": 6379,
+    "protocol": "tcp"
+  }
+]
+```
+
+### Diagnostics
+
+Test tunnel connectivity:
+```bash
+connect reach postgres --check
+```
+
+Runs end-to-end checks:
+- DNS resolution
+- TCP connectivity  
+- Latency measurement
+- Protocol validation
+
+## Alternative: Direct Tunneling
+
+If you need lower-level tunnel control, consider:
+
+### SSH Tunneling
+
+```bash
+ssh -L 5432:localhost:5432 user@remote-host
+```
+
+### Proxy Command
+
+For HTTP services, use the proxy:
+```bash
+connect proxy start
+curl http://postgres.localhost:3456
+```
+
+## Related Commands
+
+- [`connect expose`](/cli/expose) - Create outbound tunnels
+- [`connect reach`](/cli/reach) - Create inbound tunnels  
+- [`connect proxy`](/cli/proxy) - HTTP proxy with tunnel integration
+- [`connect daemon`](/cli/daemon) - Manage background tunnels

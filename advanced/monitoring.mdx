@@ -1,0 +1,649 @@
+---
+title: 'Monitoring & Debugging'
+description: 'Monitor services, view logs, and debug connection issues'
+icon: 'chart-line'
+---
+
+## Overview
+
+Private Connect provides comprehensive monitoring, logging, and debugging capabilities for tracking service health and diagnosing issues.
+
+## Service Status
+
+### Agent Status
+
+```bash
+connect whoami
+```
+
+Shows your agent configuration and exposed services:
+
+```bash
+👤 Authenticated as:
+
+  Agent:    agent_abc123
+  Label:    macbook-pro
+  Hub:      https://hub.privateconnect.io
+
+📦 Exposed Services:
+
+  • staging-db
+    Type: tcp
+    Port: 5432 → tunnel port 45001
+    Status: online
+    Created: 2026-03-02 10:00:00
+
+  • redis-cache
+    Type: tcp
+    Port: 6379 → tunnel port 45002
+    Status: online
+    Created: 2026-03-02 10:01:00
+```
+
+### Daemon Status
+
+```bash
+connect daemon status
+```
+
+Output:
+
+```bash
+📊 Private Connect Daemon Status
+
+  ● Status: running
+    PID: 12345
+    Service installed: yes
+    Platform: darwin
+
+    Agent ID: agent_abc123
+    Label: macbook-pro
+    Hub: https://hub.privateconnect.io
+```
+
+### Proxy Status
+
+```bash
+connect proxy status
+```
+
+Output:
+
+```bash
+🌐 Proxy Status
+
+  ● Proxy: running (PID 12346)
+    Port: 9999
+    TLS:  enabled
+    Routes:
+      https://staging-db.localhost:9999
+      https://redis.localhost:9999
+      https://api.localhost:9999
+```
+
+### DNS Status
+
+```bash
+connect dns status
+```
+
+Output:
+
+```bash
+🌐 Private Connect DNS Status
+
+  ● DNS Server: running (PID: 12347)
+    Resolver configured: yes
+    Domain: *.connect
+```
+
+## Logging
+
+### Daemon Logs
+
+```bash
+connect daemon logs
+```
+
+Output:
+
+```bash
+📋 Daemon Logs (/Users/user/.connect/daemon.log)
+
+────────────────────────────────────────────────────────
+[2026-03-02 10:00:00] Starting Private Connect agent...
+[2026-03-02 10:00:01] [ok] Connected to hub
+[2026-03-02 10:00:01] Agent ID: agent_abc123
+[2026-03-02 10:00:02] Exposing staging-db (port 5432)
+[2026-03-02 10:00:03] [ok] Tunnel established: port 45001
+[2026-03-02 10:00:05] Exposing redis-cache (port 6379)
+[2026-03-02 10:00:06] [ok] Tunnel established: port 45002
+────────────────────────────────────────────────────────
+
+  Showing last 50 lines. Full log: /Users/user/.connect/daemon.log
+```
+
+### Real-time Log Monitoring
+
+```bash
+# Follow daemon logs
+tail -f ~/.connect/daemon.log
+
+# Follow proxy logs
+tail -f ~/.connect/proxy.log
+
+# Follow DNS logs
+tail -f ~/.connect/dns.log
+```
+
+### Log Files
+
+| File | Purpose | Location |
+|------|---------|----------|
+| `daemon.log` | Agent connection logs | `~/.connect/daemon.log` |
+| `proxy.log` | Proxy request logs | `~/.connect/proxy.log` |
+| `dns.log` | DNS query logs | `~/.connect/dns.log` |
+| `audit.jsonl` | Broker audit log | `~/.connect/audit.jsonl` |
+
+## Health Checks
+
+### Proxy Health
+
+```typescript
+// Check if proxy is responding
+const isHealthy = await isProxyResponding(port, tls);
+
+if (!isHealthy) {
+  console.error('Proxy not responding');
+  // Restart or alert
+}
+```
+
+Implementation:
+
+```typescript
+export async function isProxyResponding(port: number, tls: boolean): Promise<boolean> {
+  try {
+    const protocol = tls ? https : http;
+    const headerName = getProxyHeader();
+    
+    const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = protocol.request({
+        hostname: '127.0.0.1',
+        port,
+        path: '/',
+        method: 'GET',
+        timeout: 2000,
+        rejectUnauthorized: false,
+      }, resolve);
+      
+      req.on('error', reject);
+      req.end();
+    });
+    
+    // Check for proxy header
+    return response.headers[headerName] === '1';
+  } catch {
+    return false;
+  }
+}
+```
+
+### Service Discovery Health
+
+```bash
+connect discover
+```
+
+Tests local service availability:
+
+```bash
+🔍 Discovered 3 service(s):
+
+  🌐 web-3000
+     localhost:3000 • http (Next.js App)
+     Status: responding
+
+  🐘 postgres-5432
+     localhost:5432 • postgres
+     Status: responding
+
+  📦 redis-6379
+     localhost:6379 • redis  
+     Status: responding
+```
+
+### Connection Testing
+
+```bash
+# Test DNS resolution
+connect dns test staging-db
+
+# Test service connectivity
+telnet localhost 5432
+
+# Test HTTP service
+curl -v http://localhost:3000/health
+
+# Test through proxy
+curl -v http://staging-db.localhost:9999/
+```
+
+## Debugging
+
+### Enable Debug Mode
+
+<Tabs>
+  <Tab title="Environment Variable">
+    ```bash
+    export DEBUG=connect:*
+    connect up
+    ```
+  </Tab>
+  
+  <Tab title="CLI Flag">
+    ```bash
+    connect up --debug
+    ```
+  </Tab>
+  
+  <Tab title="Verbose Logging">
+    ```bash
+    connect up --verbose
+    ```
+  </Tab>
+</Tabs>
+
+### Debug Output Example
+
+```bash
+DEBUG=connect:* connect reach staging-db 5432
+```
+
+Output:
+
+```bash
+connect:config Loading config from ~/.connect/config.json
+connect:auth Using API key: sk_...abc123
+connect:hub Fetching services from https://hub.privateconnect.io/v1/services
+connect:hub Found service: staging-db (tunnel port: 45001)
+connect:tunnel Creating tunnel localhost:5432 → hub:45001
+connect:tunnel Tunnel established
+connect:proxy Proxy socket connected
+connect:proxy Bidirectional pipe established
+```
+
+### Common Debug Scenarios
+
+<AccordionGroup>
+  <Accordion title="Connection Refused">
+    ```bash
+    # Check if service is running
+    lsof -i :5432
+    
+    # Check if port is accessible
+    nc -zv localhost 5432
+    
+    # Check daemon status
+    connect daemon status
+    
+    # View daemon logs
+    connect daemon logs
+    ```
+  </Accordion>
+  
+  <Accordion title="DNS Not Resolving">
+    ```bash
+    # Check DNS server
+    connect dns status
+    
+    # Test resolution
+    dig staging-db.connect
+    nslookup staging-db.connect
+    
+    # Check resolver config
+    cat /etc/resolver/connect  # macOS
+    cat /etc/systemd/resolved.conf.d/pconnect.conf  # Linux
+    
+    # Flush DNS cache
+    sudo dscacheutil -flushcache  # macOS
+    sudo systemd-resolve --flush-caches  # Linux
+    ```
+  </Accordion>
+  
+  <Accordion title="Proxy Not Routing">
+    ```bash
+    # Check proxy status
+    connect proxy status
+    
+    # Check active routes
+    cat ~/.connect/active-routes.json
+    
+    # View proxy logs
+    tail -f ~/.connect/proxy.log
+    
+    # Test proxy directly
+    curl -v http://localhost:9999/
+    curl -H "Host: staging-db.localhost" http://localhost:9999/
+    ```
+  </Accordion>
+  
+  <Accordion title="Authentication Issues">
+    ```bash
+    # Check authentication
+    connect whoami
+    
+    # Re-authenticate
+    connect logout
+    connect login
+    
+    # View config
+    cat ~/.connect/config.json
+    
+    # Test hub connectivity
+    curl https://hub.privateconnect.io/health
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Monitoring
+
+### Port Usage
+
+```bash
+# List all Private Connect processes
+lsof -i -P | grep connect
+
+# Specific port
+lsof -i :5432
+
+# All listening ports
+netstat -an | grep LISTEN
+```
+
+### Process Monitoring
+
+```bash
+# View Private Connect processes
+ps aux | grep connect
+
+# Process tree
+pstree -p | grep connect
+
+# Resource usage
+top -p $(cat ~/.connect/daemon.pid)
+```
+
+### Network Traffic
+
+```bash
+# Monitor connections (macOS)
+sudo tcpdump -i lo0 port 5432
+
+# Monitor connections (Linux)
+sudo tcpdump -i lo port 5432
+
+# Specific service
+sudo tcpdump -i lo0 port 45001
+```
+
+## Error Handling
+
+### Daemon Verification
+
+The daemon performs startup verification:
+
+```typescript
+async function verifyProcessStarted(
+  child: ChildProcess,
+  pidPath: string
+): Promise<{ success: boolean; error?: string }> {
+  const startTime = Date.now();
+  const VERIFY_TIMEOUT = 3000;
+  const VERIFY_INTERVAL = 100;
+  
+  return new Promise((resolve) => {
+    const checkInterval = setInterval(() => {
+      if (Date.now() - startTime > VERIFY_TIMEOUT) {
+        clearInterval(checkInterval);
+        
+        if (child.pid && isProcessRunning(child.pid)) {
+          resolve({ success: true });
+        } else {
+          resolve({ success: false, error: 'Process failed to start' });
+        }
+        return;
+      }
+      
+      if (child.pid && isProcessRunning(child.pid)) {
+        // Still running, continue checking
+      }
+    }, VERIFY_INTERVAL);
+    
+    child.on('error', (err) => {
+      clearInterval(checkInterval);
+      resolve({ success: false, error: err.message });
+    });
+    
+    child.on('exit', (code) => {
+      clearInterval(checkInterval);
+      resolve({ success: false, error: `Process exited with code ${code}` });
+    });
+  });
+}
+```
+
+### Graceful Shutdown
+
+```typescript
+async function gracefullyStopProcess(pid: number): Promise<{ success: boolean; error?: string }> {
+  // Send SIGTERM for graceful shutdown
+  process.kill(pid, 'SIGTERM');
+  
+  // Wait up to 5 seconds
+  for (let i = 0; i < 10; i++) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (!isProcessRunning(pid)) {
+      return { success: true };
+    }
+  }
+  
+  // Force kill if still running
+  if (isProcessRunning(pid)) {
+    process.kill(pid, 'SIGKILL');
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  
+  return { success: !isProcessRunning(pid) };
+}
+```
+
+### Cleanup Handlers
+
+```typescript
+const cleanup = () => {
+  if (exiting) return;
+  exiting = true;
+  
+  clearInterval(hubRefreshInterval);
+  if (routeDebounce) clearTimeout(routeDebounce);
+  if (routeWatcher) routeWatcher.close();
+  
+  clearProxyState();
+  server.close(() => process.exit(0));
+  
+  setTimeout(() => process.exit(0), 2000).unref();
+};
+
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+```
+
+## Diagnostic Commands
+
+### System Doctor
+
+```bash
+connect doctor
+```
+
+Runs diagnostic checks:
+
+```bash
+🔍 Running diagnostics...
+
+  [ok] Agent configured
+  [ok] Hub reachable
+  [ok] Daemon running
+  [!] Proxy not running
+  [ok] DNS configured
+  [ok] Git hooks installed
+
+  Issues found:
+    • Proxy is not running
+      Fix: connect proxy start
+```
+
+### Configuration Validation
+
+```bash
+# Validate project config
+connect dev --file pconnect.yml --dry-run
+
+# Validate broker policy
+connect broker status
+
+# Test DNS
+connect dns test my-service
+```
+
+## Metrics Collection
+
+### Audit Statistics
+
+```bash
+connect broker audit --stats
+```
+
+Output:
+
+```bash
+📊 Audit Statistics
+
+  Total actions: 1,234
+  Allowed: 1,045
+  Blocked: 89
+  Reviewed: 100
+
+  By type:
+    file: 856
+    command: 298
+    git: 80
+```
+
+### Service Statistics
+
+Query hub API:
+
+```bash
+curl -H "x-api-key: $API_KEY" https://hub.privateconnect.io/v1/stats
+```
+
+Response:
+
+```json
+{
+  "totalServices": 12,
+  "activeServices": 10,
+  "totalConnections": 45,
+  "bytesTransferred": 1234567890,
+  "uptime": 86400
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Health Checks" icon="heartbeat">
+    ```bash
+    # Add to cron
+    */5 * * * * connect whoami > /dev/null || notify "Private Connect down"
+    ```
+  </Card>
+  
+  <Card title="Log Rotation" icon="rotate">
+    Logs auto-rotate at 5MB. Monitor log sizes:
+    ```bash
+    du -h ~/.connect/*.log
+    ```
+  </Card>
+  
+  <Card title="Monitor Audit Logs" icon="clipboard">
+    Review broker activity regularly:
+    ```bash
+    connect broker audit --stats
+    ```
+  </Card>
+  
+  <Card title="Debug Mode" icon="bug">
+    Enable debug for troubleshooting:
+    ```bash
+    DEBUG=connect:* connect up
+    ```
+  </Card>
+</CardGroup>
+
+## Alerting
+
+### Custom Health Checks
+
+```bash
+#!/bin/bash
+# healthcheck.sh
+
+if ! connect whoami > /dev/null 2>&1; then
+  echo "Private Connect agent down"
+  # Send alert (email, Slack, PagerDuty, etc.)
+  exit 1
+fi
+
+echo "Private Connect healthy"
+exit 0
+```
+
+### Integration Examples
+
+<CodeGroup>
+```bash Slack
+#!/bin/bash
+if ! connect whoami > /dev/null 2>&1; then
+  curl -X POST https://hooks.slack.com/services/YOUR/WEBHOOK/URL \
+    -H 'Content-Type: application/json' \
+    -d '{"text":"Private Connect agent is down!"}'
+fi
+```
+
+```bash Email
+#!/bin/bash
+if ! connect whoami > /dev/null 2>&1; then
+  echo "Private Connect agent is down!" | mail -s "Alert" admin@example.com
+fi
+```
+
+```bash PagerDuty
+#!/bin/bash
+if ! connect whoami > /dev/null 2>&1; then
+  curl -X POST https://events.pagerduty.com/v2/enqueue \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "routing_key": "YOUR_ROUTING_KEY",
+      "event_action": "trigger",
+      "payload": {
+        "summary": "Private Connect agent is down",
+        "severity": "critical",
+        "source": "healthcheck.sh"
+      }
+    }'
+fi
+```
+</CodeGroup>

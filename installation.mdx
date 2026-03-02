@@ -1,0 +1,449 @@
+---
+title: Installation
+description: Detailed installation instructions for all platforms
+---
+
+Private Connect works on macOS, Linux, Windows (WSL), and can be built from source.
+
+## Quick Install
+
+The fastest way to get started:
+
+<CodeGroup>
+  ```bash macOS / Linux
+  curl -fsSL https://privateconnect.co/install.sh | bash
+  ```
+
+  ```bash Windows (WSL)
+  curl -fsSL https://privateconnect.co/install.sh | bash
+  ```
+</CodeGroup>
+
+The install script:
+- Downloads the latest binary for your platform
+- Installs to `/usr/local/bin/connect`
+- Makes the CLI available globally
+- Requires no additional dependencies
+
+## Verify Installation
+
+After installation, verify the CLI is available:
+
+```bash
+connect --version
+```
+
+You should see output like:
+
+```
+Private Connect v1.0.0
+```
+
+## Platform-Specific Instructions
+
+<Tabs>
+  <Tab title="macOS">
+    ### macOS Installation
+
+    **Recommended: Install script**
+
+    ```bash
+    curl -fsSL https://privateconnect.co/install.sh | bash
+    ```
+
+    **Manual installation**
+
+    1. Download the latest macOS binary from [releases](https://github.com/treadiehq/private-connect/releases)
+    2. Extract and move to `/usr/local/bin`:
+
+    ```bash
+    tar -xzf private-connect-macos.tar.gz
+    sudo mv connect /usr/local/bin/
+    sudo chmod +x /usr/local/bin/connect
+    ```
+
+    **Homebrew (coming soon)**
+
+    ```bash
+    brew install private-connect
+    ```
+
+    ### macOS Permissions
+
+    On first run, macOS may block the binary. If you see a security warning:
+
+    1. Go to **System Preferences → Security & Privacy**
+    2. Click **"Allow Anyway"** next to the blocked app
+    3. Run `connect up` again
+
+    Or allow it from the command line:
+
+    ```bash
+    sudo xattr -r -d com.apple.quarantine /usr/local/bin/connect
+    ```
+  </Tab>
+
+  <Tab title="Linux">
+    ### Linux Installation
+
+    **Recommended: Install script**
+
+    ```bash
+    curl -fsSL https://privateconnect.co/install.sh | bash
+    ```
+
+    **Manual installation**
+
+    1. Download the latest Linux binary from [releases](https://github.com/treadiehq/private-connect/releases)
+    2. Extract and move to `/usr/local/bin`:
+
+    ```bash
+    tar -xzf private-connect-linux.tar.gz
+    sudo mv connect /usr/local/bin/
+    sudo chmod +x /usr/local/bin/connect
+    ```
+
+    ### Ubuntu/Debian
+
+    ```bash
+    wget https://privateconnect.co/install.sh
+    bash install.sh
+    ```
+
+    ### CentOS/RHEL/Fedora
+
+    ```bash
+    curl -fsSL https://privateconnect.co/install.sh | bash
+    ```
+
+    ### Alpine Linux
+
+    Alpine requires glibc compatibility:
+
+    ```bash
+    apk add --no-cache libc6-compat
+    curl -fsSL https://privateconnect.co/install.sh | bash
+    ```
+
+    ### Permissions
+
+    The binary needs to bind to local ports. This usually requires no special permissions, but if you encounter issues:
+
+    ```bash
+    # Allow binding to privileged ports (< 1024) without sudo
+    sudo setcap 'cap_net_bind_service=+ep' /usr/local/bin/connect
+    ```
+  </Tab>
+
+  <Tab title="Windows (WSL)">
+    ### Windows (WSL) Installation
+
+    Private Connect runs in Windows Subsystem for Linux (WSL).
+
+    **Prerequisites**
+
+    1. Install WSL 2:
+
+    ```powershell
+    wsl --install
+    ```
+
+    2. Install Ubuntu from Microsoft Store (or your preferred distribution)
+
+    **Install Private Connect**
+
+    Inside WSL:
+
+    ```bash
+    curl -fsSL https://privateconnect.co/install.sh | bash
+    ```
+
+    **Access from Windows**
+
+    Services exposed in WSL are accessible from Windows via `localhost`:
+
+    ```bash
+    # In WSL
+    connect reach my-db
+    # → localhost:5432
+
+    # From Windows
+    # Connect to localhost:5432 in any Windows app
+    ```
+
+    ### Windows Native (Coming Soon)
+
+    Native Windows support is in development. For now, WSL provides full functionality.
+  </Tab>
+
+  <Tab title="Docker">
+    ### Docker Installation
+
+    Run Private Connect in a container:
+
+    **Quick start**
+
+    ```bash
+    docker run -d \
+      --name private-connect \
+      -e PRIVATECONNECT_TOKEN=pc_xxx \
+      ghcr.io/treadiehq/private-connect:latest \
+      connect up --label docker-agent
+    ```
+
+    **Expose a service**
+
+    ```bash
+    docker run -d \
+      --name private-connect \
+      --network host \
+      -e PRIVATECONNECT_TOKEN=pc_xxx \
+      ghcr.io/treadiehq/private-connect:latest \
+      connect expose localhost:5432 --name my-db
+    ```
+
+    **Docker Compose**
+
+    ```yaml
+    version: '3.8'
+    services:
+      private-connect:
+        image: ghcr.io/treadiehq/private-connect:latest
+        environment:
+          PRIVATECONNECT_TOKEN: pc_xxx
+        command: connect up --label prod-server
+        restart: unless-stopped
+        network_mode: host
+    ```
+
+    ### Notes
+
+    - Use `network_mode: host` to access services on the Docker host
+    - Store API key in environment variables or secrets
+    - Container stays running to maintain connections
+  </Tab>
+</Tabs>
+
+## Build from Source
+
+For development or custom builds:
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/treadiehq/private-connect.git
+    cd private-connect
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Requires Node.js 18+ and pnpm:
+
+    ```bash
+    pnpm install
+    ```
+  </Step>
+
+  <Step title="Build the binary">
+    ```bash
+    cd apps/agent
+    pnpm run build:binary
+    ```
+
+    The binary is created in `apps/agent/dist/`.
+  </Step>
+
+  <Step title="Install globally">
+    ```bash
+    ./scripts/install.sh
+    ```
+
+    Or manually:
+
+    ```bash
+    sudo cp apps/agent/dist/connect /usr/local/bin/
+    sudo chmod +x /usr/local/bin/connect
+    ```
+  </Step>
+</Steps>
+
+### Development Mode
+
+Run the entire stack locally (API + Web + Agent):
+
+```bash
+./scripts/start.sh dev      # Start all services
+./scripts/stop.sh           # Stop all
+./scripts/status.sh         # Check status
+```
+
+**Database setup (PostgreSQL required):**
+
+```bash
+docker compose up -d postgres
+cp apps/api/.env.example apps/api/.env
+cd apps/api && pnpm db:push
+```
+
+**Access the web UI:**
+
+Open http://localhost:3000 to view services, diagnostics, and manage API keys.
+
+## First-Time Setup
+
+After installation, authenticate:
+
+```bash
+connect up
+```
+
+This opens your browser for authentication. On headless servers, you'll see a code to enter from any device.
+
+**For CI/CD or headless servers:**
+
+<CodeGroup>
+  ```bash API Key
+  connect up --api-key pc_xxx --label prod-server
+  ```
+
+  ```bash Environment Variable
+  export PRIVATECONNECT_TOKEN=pc_xxx
+  connect up --label staging
+  ```
+</CodeGroup>
+
+## Configuration
+
+### Config File Location
+
+Private Connect stores configuration at:
+
+- **macOS/Linux**: `~/.connect/config.json`
+- **Windows (WSL)**: `~/.connect/config.json`
+
+### Multiple Agents
+
+Run multiple agents on the same machine with different configs:
+
+```bash
+# Terminal 1
+connect up --label agent-1 --config ~/.connect/agent1.json
+connect expose localhost:8080 --name api --config ~/.connect/agent1.json
+
+# Terminal 2
+connect up --label agent-2 --config ~/.connect/agent2.json
+connect reach api --config ~/.connect/agent2.json
+```
+
+### Environment Variables
+
+Configure via environment variables:
+
+```bash
+export PRIVATECONNECT_TOKEN=pc_xxx       # API key
+export PRIVATECONNECT_HUB=https://...    # Hub URL (for self-hosted)
+export CONNECT=0                         # Disable Private Connect (for CI)
+```
+
+## Update
+
+Update to the latest version:
+
+```bash
+connect update
+```
+
+Or re-run the install script:
+
+```bash
+curl -fsSL https://privateconnect.co/install.sh | bash
+```
+
+## Uninstall
+
+Remove Private Connect:
+
+```bash
+# Stop any running daemons
+connect daemon uninstall
+
+# Remove binary
+sudo rm /usr/local/bin/connect
+
+# Remove config
+rm -rf ~/.connect
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Create your first tunnel in under 2 minutes
+  </Card>
+  <Card
+    title="CLI Reference"
+    icon="terminal"
+    href="/cli-reference"
+  >
+    Complete command reference and options
+  </Card>
+  <Card
+    title="Background Daemon"
+    icon="server"
+    href="/daemon"
+  >
+    Run Private Connect as a background service
+  </Card>
+  <Card
+    title="CI/CD Integration"
+    icon="code-branch"
+    href="/cicd"
+  >
+    Use Private Connect in GitHub Actions, GitLab CI, and more
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Binary not found
+
+Make sure `/usr/local/bin` is in your PATH:
+
+```bash
+echo $PATH
+
+# Add to PATH if needed (add to ~/.bashrc or ~/.zshrc)
+export PATH="/usr/local/bin:$PATH"
+```
+
+### Permission denied
+
+Make sure the binary is executable:
+
+```bash
+sudo chmod +x /usr/local/bin/connect
+```
+
+### macOS security warning
+
+Remove quarantine attribute:
+
+```bash
+sudo xattr -r -d com.apple.quarantine /usr/local/bin/connect
+```
+
+### Installation fails
+
+Try manual installation:
+
+1. Download binary from [releases](https://github.com/treadiehq/private-connect/releases)
+2. Extract and copy to `/usr/local/bin/`
+3. Make executable: `chmod +x /usr/local/bin/connect`
+
+### Need help?
+
+Join our [Discord community](https://discord.gg/KqdBcqRk5E) for support.

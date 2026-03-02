@@ -1,0 +1,337 @@
+---
+title: connect reach
+description: Access a remote service through Private Connect
+---
+
+The `connect reach` command creates a local tunnel to a service exposed by your teammates, making it accessible on `localhost`.
+
+## Usage
+
+```bash
+connect reach <service-name> [options]
+```
+
+## Arguments
+
+<ParamField path="service-name" type="string" required>
+  Name of the service to connect to, or a full URL for direct diagnostics
+</ParamField>
+
+## Options
+
+<ParamField path="--port" type="string">
+  Local port to use. If not specified, uses a stable auto-selected port.
+</ParamField>
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--timeout" type="number" default={30000}>
+  Connection timeout in milliseconds
+</ParamField>
+
+<ParamField path="--check" type="boolean" default={false}>
+  Run diagnostics only, don't create tunnel
+</ParamField>
+
+<ParamField path="--json" type="boolean" default={false}>
+  Output results in JSON format
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+## Examples
+
+### Reach a Database
+
+```bash
+connect reach postgres
+```
+
+Output:
+```
+🔍 Reaching "postgres"...
+
+  Service ID: svc_xxx
+  Target: localhost:5432
+  From: alex-macbook (this agent)
+
+  Running diagnostics...
+
+  [ok] REACHABLE
+
+  ┌─────────────────────────────────────────┐
+  │  DNS     [ok]  OK (10.0.1.5)            │
+  │  TCP     [ok]  OK                       │
+  │  Latency    52ms                        │
+  │  From       alex-macbook                │
+  └─────────────────────────────────────────┘
+
+📡 Creating local tunnel...
+
+  [ok] Connected to hub
+  [ok] Listening on localhost:5432
+
+  [ok] Connected to postgres
+
+  Endpoints:
+    TCP:   localhost:5432
+    HTTP:  http://postgres.localhost:3456
+           (proxy auto-started on port 3456)
+    psql:  psql -h localhost -p 5432
+
+  Press Ctrl+C to disconnect
+```
+
+### Specify Custom Port
+
+```bash
+connect reach mysql --port 13306
+```
+
+Output:
+```
+[ok] Listening on localhost:13306
+```
+
+### Check Service Health
+
+```bash
+connect reach api --check
+```
+
+Output:
+```
+  [ok] REACHABLE
+
+  ┌─────────────────────────────────────────┐
+  │  DNS     [ok]  OK (10.0.1.5)            │
+  │  TCP     [ok]  OK                       │
+  │  HTTP    [ok]  200 OK                   │
+  │  Latency    28ms                        │
+  └─────────────────────────────────────────┘
+```
+
+### Direct URL Diagnostics
+
+```bash
+connect reach https://api.staging.example.com --check
+```
+
+Output:
+```
+  Target: api.staging.example.com:443
+  Protocol: HTTPS
+
+  Running diagnostics...
+
+  [ok] REACHABLE
+
+  ┌─────────────────────────────────────────┐
+  │  DNS     [ok]  OK (54.200.10.5)         │
+  │  TCP     [ok]  OK                       │
+  │  TLS     [ok]  OK                       │
+  │  HTTP    [ok]  200 OK                   │
+  │  Latency    145ms                       │
+  └─────────────────────────────────────────┘
+
+  🔒 TLS Certificate
+     Subject: api.staging.example.com
+     Issuer: Let's Encrypt
+     Expires: 89 days
+```
+
+### JSON Output
+
+```bash
+connect reach postgres --check --json
+```
+
+Output:
+```json
+{
+  "success": true,
+  "service": {
+    "id": "svc_xxx",
+    "name": "postgres",
+    "target": "localhost:5432"
+  },
+  "diagnostic": {
+    "id": "diag_xxx",
+    "dnsStatus": "OK (10.0.1.5)",
+    "tcpStatus": "OK",
+    "latencyMs": 52,
+    "message": "OK",
+    "perspective": "agent",
+    "sourceLabel": "alex-macbook"
+  },
+  "shareUrl": null
+}
+```
+
+## Behavior
+
+### Stable Port Selection
+
+When `--port` is not specified, `connect reach` uses intelligent port selection:
+
+1. **Saved mapping**: If you've connected to this service before, uses the same port
+2. **Original port**: Tries to use the service's original port if available
+3. **Hash-derived port**: Generates a consistent port based on service name
+
+This ensures the same service always maps to the same local port across sessions.
+
+### Auto-Start Proxy
+
+If the proxy isn't running, `connect reach` automatically starts it:
+
+```
+HTTP:  http://postgres.localhost:3456
+       (proxy auto-started on port 3456)
+```
+
+This enables accessing services via subdomain URLs.
+
+### Connection Examples
+
+The CLI shows connection examples based on the service type:
+
+**PostgreSQL:**
+```bash
+psql:  psql -h localhost -p 5432
+```
+
+**Redis:**
+```bash
+redis: redis-cli -p 6379
+```
+
+**MongoDB:**
+```bash
+mongo: mongosh --port 27017
+```
+
+**MySQL:**
+```bash
+mysql: mysql -h 127.0.0.1 -P 3306
+```
+
+**HTTP/API:**
+```bash
+curl:  curl http://api.localhost:3456
+```
+
+### External Services
+
+Services marked as "external" (no agent, direct connection) are diagnosed but don't create tunnels:
+
+```bash
+connect reach production-db
+```
+
+Output:
+```
+  Service ID: svc_xxx
+  Target: db.prod.example.com:5432
+  Type: External (direct connection)
+
+  Running diagnostics...
+
+  [ok] REACHABLE
+```
+
+## Diagnostics
+
+### Check Types
+
+**DNS Check:**
+- Resolves hostname to IP address
+- Shows resolved IP in diagnostic output
+
+**TCP Check:**
+- Tests port connectivity
+- Measures latency
+
+**TLS Check (HTTPS only):**
+- Validates certificate
+- Shows issuer, subject, expiry
+- Detects self-signed certificates
+- Reports common errors (hostname mismatch, expired, untrusted)
+
+**HTTP Check (HTTP/HTTPS only):**
+- Makes GET request to `/`
+- Reports status code
+- Measures response time
+
+### Error Messages
+
+**Service Not Found:**
+```
+[x] Service "postgres" not found
+
+  Available services:
+    ● mysql
+    ● redis
+    ● api
+```
+
+**Service Offline:**
+```
+[x] UNREACHABLE
+  TCP [x] FAIL
+  Check that your service is running on the target port
+```
+
+**TLS Errors:**
+```
+🔒 TLS Certificate
+   Subject: api.example.com
+   Issuer: Self-signed
+   [!] Self-signed certificate
+   [x] Certificate hostname mismatch
+```
+
+## Exit Codes
+
+- `0` - Successfully connected and tunnel closed gracefully
+- `1` - Service not found, unreachable, or connection failed
+
+## Related Commands
+
+- [`connect expose`](/cli/expose) - Expose services for others to reach
+- [`connect proxy`](/cli/proxy) - Manage the HTTP proxy
+- [`connect clone`](/cli/clone) - Clone multiple services at once
+
+## Troubleshooting
+
+### Port Already in Use
+
+```bash
+[x] Port 5432 is in use
+  Try a different port with --port <port>
+```
+
+Solution:
+```bash
+connect reach postgres --port 15432
+```
+
+### Service Not Found
+
+List available services:
+```bash
+connect reach postgres
+# Shows available services if not found
+```
+
+Or check the dashboard at https://app.privateconnect.co
+
+### Connection Timeout
+
+Increase timeout:
+```bash
+connect reach slow-api --timeout 60000
+```

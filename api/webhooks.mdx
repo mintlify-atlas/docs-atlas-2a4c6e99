@@ -1,0 +1,581 @@
+---
+title: 'Webhooks API'
+description: 'Subscribe to events and receive real-time notifications'
+---
+
+## Overview
+
+Webhooks enable real-time notifications when events occur in your workspace. Subscribe to tunnel creation, agent connections, share access, and more.
+
+## Create Webhook
+
+Create a new webhook subscription.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.privateconnect.co/v1/webhooks \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/webhooks",
+    "events": ["tunnel.created", "tunnel.deleted", "agent.connected"],
+    "description": "Production webhook"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.privateconnect.co/v1/webhooks', {
+  method: 'POST',
+  headers: {
+    'x-api-key': 'pc_your_api_key',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    url: 'https://example.com/webhooks',
+    events: ['tunnel.created', 'tunnel.deleted']
+  })
+});
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.privateconnect.co/v1/webhooks',
+    headers={'x-api-key': 'pc_your_api_key'},
+    json={
+        'url': 'https://example.com/webhooks',
+        'events': ['tunnel.created', 'tunnel.deleted']
+    }
+)
+data = response.json()
+```
+</CodeGroup>
+
+**Request Body:**
+
+<ParamField body="url" type="string" required>
+  Webhook endpoint URL (must be HTTPS)
+</ParamField>
+
+<ParamField body="events" type="string[]" required>
+  Array of event types to subscribe to (see [Available Events](#available-events))
+</ParamField>
+
+<ParamField body="description" type="string">
+  Webhook description (max 500 characters)
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": "wh_123",
+  "url": "https://example.com/webhooks",
+  "events": ["tunnel.created", "tunnel.deleted", "agent.connected"],
+  "secret": "whsec_1234567890abcdefghijklmnop",
+  "description": "Production webhook",
+  "isActive": true,
+  "createdAt": "2026-03-02T10:00:00.000Z"
+}
+```
+
+<Warning>
+  Save the `secret` value immediately - it's only shown once and is used to verify webhook signatures.
+</Warning>
+
+## List Webhooks
+
+Retrieve all webhooks for the workspace.
+
+```bash
+curl https://api.privateconnect.co/v1/webhooks \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "wh_123",
+    "url": "https://example.com/webhooks",
+    "events": ["tunnel.created", "tunnel.deleted"],
+    "description": "Production webhook",
+    "isActive": true,
+    "createdAt": "2026-03-02T10:00:00.000Z",
+    "lastTriggeredAt": "2026-03-02T11:00:00.000Z",
+    "successCount": 42,
+    "failureCount": 0
+  }
+]
+```
+
+## Get Webhook Details
+
+Retrieve details for a specific webhook including recent delivery attempts.
+
+```bash
+curl https://api.privateconnect.co/v1/webhooks/wh_123 \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "id": "wh_123",
+  "url": "https://example.com/webhooks",
+  "events": ["tunnel.created", "tunnel.deleted"],
+  "description": "Production webhook",
+  "isActive": true,
+  "createdAt": "2026-03-02T10:00:00.000Z",
+  "lastTriggeredAt": "2026-03-02T11:00:00.000Z",
+  "successCount": 42,
+  "failureCount": 0,
+  "recentDeliveries": [
+    {
+      "id": "del_123",
+      "event": "tunnel.created",
+      "statusCode": 200,
+      "success": true,
+      "attemptedAt": "2026-03-02T11:00:00.000Z",
+      "latencyMs": 123
+    }
+  ]
+}
+```
+
+## Update Webhook
+
+Update webhook URL, events, or active status.
+
+```bash
+curl -X PATCH https://api.privateconnect.co/v1/webhooks/wh_123 \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/webhooks/v2",
+    "events": ["tunnel.created", "tunnel.deleted", "share.created"],
+    "isActive": true
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="url" type="string">
+  New webhook URL (must be HTTPS)
+</ParamField>
+
+<ParamField body="events" type="string[]">
+  Updated array of event types
+</ParamField>
+
+<ParamField body="description" type="string">
+  Updated description
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Enable or disable the webhook
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": "wh_123",
+  "url": "https://example.com/webhooks/v2",
+  "events": ["tunnel.created", "tunnel.deleted", "share.created"],
+  "isActive": true
+}
+```
+
+## Delete Webhook
+
+Delete a webhook and all its delivery history.
+
+```bash
+curl -X DELETE https://api.privateconnect.co/v1/webhooks/wh_123 \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+## Rotate Webhook Secret
+
+Generate a new HMAC secret for the webhook.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/webhooks/wh_123/rotate-secret \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "secret": "whsec_new_secret_here"
+}
+```
+
+<Warning>
+  Update your webhook handler to use the new secret before the old one expires.
+</Warning>
+
+## Test Webhook
+
+Send a test event to the webhook endpoint.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/webhooks/wh_123/test \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "statusCode": 200
+}
+```
+
+If the test fails:
+
+```json
+{
+  "success": false,
+  "statusCode": 500,
+  "error": "Connection refused"
+}
+```
+
+## Available Events
+
+List all available webhook event types.
+
+```bash
+curl https://api.privateconnect.co/v1/webhooks/events
+```
+
+**Response:**
+
+```json
+{
+  "events": [
+    { "name": "tunnel.created", "description": "A new tunnel was created" },
+    { "name": "tunnel.connected", "description": "An agent connected to a tunnel" },
+    { "name": "tunnel.disconnected", "description": "An agent disconnected from a tunnel" },
+    { "name": "tunnel.deleted", "description": "A tunnel was deleted" },
+    { "name": "share.created", "description": "A new share link was created" },
+    { "name": "share.accessed", "description": "A share link was accessed" },
+    { "name": "share.revoked", "description": "A share link was revoked" },
+    { "name": "agent.connected", "description": "An agent came online" },
+    { "name": "agent.disconnected", "description": "An agent went offline" },
+    { "name": "agent.registered", "description": "A new agent was registered" }
+  ]
+}
+```
+
+### Event Types
+
+<AccordionGroup>
+  <Accordion title="tunnel.created">
+    Triggered when a new tunnel is created.
+    
+    **Payload:**
+    ```json
+    {
+      "event": "tunnel.created",
+      "data": {
+        "id": "tun_123",
+        "name": "prod-db",
+        "agentId": "550e8400-e29b-41d4-a716-446655440000",
+        "targetPort": 5432,
+        "protocol": "tcp",
+        "createdAt": "2026-03-02T10:00:00.000Z"
+      },
+      "workspaceId": "ws_123",
+      "timestamp": "2026-03-02T10:00:00.000Z"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="tunnel.connected">
+    Triggered when an agent establishes a connection to a tunnel.
+    
+    **Payload:**
+    ```json
+    {
+      "event": "tunnel.connected",
+      "data": {
+        "id": "tun_123",
+        "agentId": "550e8400-e29b-41d4-a716-446655440000",
+        "agentName": "web-server-1"
+      },
+      "workspaceId": "ws_123",
+      "timestamp": "2026-03-02T10:00:00.000Z"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="tunnel.disconnected">
+    Triggered when an agent disconnects from a tunnel.
+  </Accordion>
+
+  <Accordion title="tunnel.deleted">
+    Triggered when a tunnel is deleted.
+  </Accordion>
+
+  <Accordion title="share.created">
+    Triggered when a new share link is created.
+    
+    **Payload:**
+    ```json
+    {
+      "event": "share.created",
+      "data": {
+        "id": "share_123",
+        "name": "contractor-access",
+        "serviceId": "svc_123",
+        "expiresAt": "2026-03-09T10:00:00.000Z"
+      },
+      "workspaceId": "ws_123",
+      "timestamp": "2026-03-02T10:00:00.000Z"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="share.accessed">
+    Triggered when a share link is accessed (rate limited to prevent spam).
+    
+    **Payload:**
+    ```json
+    {
+      "event": "share.accessed",
+      "data": {
+        "shareId": "share_123",
+        "ipAddress": "203.0.113.42",
+        "path": "/api/users",
+        "method": "GET"
+      },
+      "workspaceId": "ws_123",
+      "timestamp": "2026-03-02T10:00:00.000Z"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="share.revoked">
+    Triggered when a share link is revoked.
+  </Accordion>
+
+  <Accordion title="agent.connected">
+    Triggered when an agent comes online.
+    
+    **Payload:**
+    ```json
+    {
+      "event": "agent.connected",
+      "data": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "web-server-1",
+        "label": "production"
+      },
+      "workspaceId": "ws_123",
+      "timestamp": "2026-03-02T10:00:00.000Z"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="agent.disconnected">
+    Triggered when an agent goes offline.
+  </Accordion>
+
+  <Accordion title="agent.registered">
+    Triggered when a new agent is registered.
+  </Accordion>
+</AccordionGroup>
+
+## Webhook Payload Format
+
+All webhook events follow this format:
+
+```json
+{
+  "id": "evt_1234567890",
+  "event": "tunnel.created",
+  "data": {
+    // Event-specific data
+  },
+  "workspaceId": "ws_123",
+  "timestamp": "2026-03-02T10:00:00.000Z"
+}
+```
+
+<ResponseField name="id" type="string">
+  Unique event ID
+</ResponseField>
+
+<ResponseField name="event" type="string">
+  Event type (see [Available Events](#available-events))
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Event-specific payload
+</ResponseField>
+
+<ResponseField name="workspaceId" type="string">
+  Workspace that triggered the event
+</ResponseField>
+
+<ResponseField name="timestamp" type="string">
+  ISO 8601 timestamp when the event occurred
+</ResponseField>
+
+## Signature Verification
+
+Webhook requests include an HMAC signature for verification:
+
+**Headers:**
+
+```
+x-webhook-signature: sha256=abc123...
+x-webhook-timestamp: 1709380800
+```
+
+### Verify Signature (Node.js)
+
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhook(payload, signature, secret, timestamp) {
+  // Prevent replay attacks (reject if older than 5 minutes)
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - timestamp) > 300) {
+    return false;
+  }
+
+  // Compute HMAC
+  const signedPayload = `${timestamp}.${JSON.stringify(payload)}`;
+  const hmac = crypto
+    .createHmac('sha256', secret)
+    .update(signedPayload)
+    .digest('hex');
+
+  // Compare signatures
+  return `sha256=${hmac}` === signature;
+}
+
+// Usage in Express
+app.post('/webhooks', (req, res) => {
+  const signature = req.headers['x-webhook-signature'];
+  const timestamp = req.headers['x-webhook-timestamp'];
+  const secret = 'whsec_your_secret';
+
+  if (!verifyWebhook(req.body, signature, secret, timestamp)) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  // Process webhook
+  console.log('Event:', req.body.event);
+  res.status(200).send('OK');
+});
+```
+
+### Verify Signature (Python)
+
+```python
+import hmac
+import hashlib
+import time
+from flask import Flask, request
+
+app = Flask(__name__)
+
+def verify_webhook(payload, signature, secret, timestamp):
+    # Prevent replay attacks
+    if abs(time.time() - int(timestamp)) > 300:
+        return False
+    
+    # Compute HMAC
+    signed_payload = f"{timestamp}.{payload}"
+    hmac_digest = hmac.new(
+        secret.encode(),
+        signed_payload.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    
+    # Compare signatures
+    return f"sha256={hmac_digest}" == signature
+
+@app.route('/webhooks', methods=['POST'])
+def webhook():
+    signature = request.headers.get('x-webhook-signature')
+    timestamp = request.headers.get('x-webhook-timestamp')
+    secret = 'whsec_your_secret'
+    
+    if not verify_webhook(request.data.decode(), signature, secret, timestamp):
+        return 'Invalid signature', 401
+    
+    # Process webhook
+    event = request.json
+    print(f"Event: {event['event']}")
+    return 'OK', 200
+```
+
+<Warning>
+  Always verify webhook signatures to prevent spoofed requests.
+</Warning>
+
+## Delivery and Retries
+
+- **Timeout**: 30 seconds
+- **Retries**: 3 attempts with exponential backoff (1s, 5s, 25s)
+- **Success**: HTTP status codes 200-299
+- **Failure**: Any other status code or timeout
+
+### Response Requirements
+
+Your webhook endpoint should:
+
+1. Respond quickly (< 30 seconds)
+2. Return HTTP 200-299 for success
+3. Process events asynchronously if needed
+4. Handle duplicate events (idempotency)
+
+### Example Handler
+
+```javascript
+app.post('/webhooks', async (req, res) => {
+  // Verify signature first
+  if (!verifySignature(req)) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  // Acknowledge receipt immediately
+  res.status(200).send('OK');
+
+  // Process asynchronously
+  processWebhook(req.body).catch(err => {
+    console.error('Webhook processing failed:', err);
+  });
+});
+```
+
+## Best Practices
+
+1. **Verify signatures** - Always validate HMAC signatures to prevent spoofing
+2. **Handle duplicates** - Events may be delivered multiple times (use event IDs for deduplication)
+3. **Respond quickly** - Acknowledge receipt within 30 seconds, process asynchronously
+4. **Monitor failures** - Track failed deliveries and investigate issues
+5. **Use HTTPS** - Webhook URLs must use HTTPS for security
+6. **Filter events** - Only subscribe to events you need to reduce noise
+7. **Implement retries** - Handle temporary failures gracefully on your end
+8. **Log events** - Keep audit logs of received webhooks for debugging

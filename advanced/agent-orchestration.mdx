@@ -1,0 +1,419 @@
+---
+title: 'Agent Orchestration'
+description: 'Coordinate multiple agents, implement discovery, and orchestrate distributed services'
+icon: 'diagram-project'
+---
+
+## Overview
+
+Private Connect provides powerful agent orchestration features for managing distributed systems, discovering services, and coordinating peer-to-peer connections.
+
+## Agent Discovery
+
+### Automatic Service Detection
+
+Private Connect can automatically discover running services on localhost:
+
+```bash
+connect discover
+```
+
+This scans common ports and identifies service types:
+
+```bash
+🔍 Discovered 3 service(s):
+
+  🌐 web-3000
+     localhost:3000 • http (Next.js App)
+
+  🐘 postgres-5432
+     localhost:5432 • postgres
+
+  📦 redis-6379
+     localhost:6379 • redis
+```
+
+### Discovery with Custom Ports
+
+```bash
+# Scan specific ports
+connect discover --ports 8080,8443,9000
+
+# Scan a range
+connect discover --range 3000-3010
+```
+
+### Service Identification
+
+The discovery engine identifies services by:
+
+<AccordionGroup>
+  <Accordion title="HTTP/HTTPS Services">
+    - Detects web servers on common ports (80, 443, 3000, 8080, etc.)
+    - Extracts page titles and server headers
+    - Distinguishes between HTTP and HTTPS
+  </Accordion>
+  
+  <Accordion title="Database Services">
+    - **PostgreSQL**: Sends SSL request packet to identify
+    - **Redis**: Sends PING command and checks for PONG response
+    - **MySQL**: Detects on port 3306
+    - **MongoDB**: Detects on port 27017
+  </Accordion>
+  
+  <Accordion title="Protocol Detection">
+    ```typescript
+    // Example from discovery.ts
+    if (likely === 'redis' || port === 6379) {
+      if (await isRedis(host, port)) {
+        type = 'redis';
+      }
+    } else if (likely === 'postgres' || port === 5432) {
+      if (await isPostgres(host, port)) {
+        type = 'postgres';
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Agent Messaging
+
+### Hub Communication
+
+Agents communicate through the hub for service metadata and routing:
+
+```typescript
+// Fetch available services
+const response = await fetch(`${hubUrl}/v1/services`, {
+  headers: { 'x-api-key': apiKey },
+});
+
+const services = await response.json();
+// Returns: [{ name, targetPort, tunnelPort, status, protocol }]
+```
+
+### Service Registration
+
+When exposing a service, agents register with the hub:
+
+```bash
+connect expose staging-db 5432
+```
+
+This registers:
+- **Service name**: `staging-db`
+- **Target port**: `5432` (where your service runs)
+- **Tunnel port**: Allocated by hub for connections
+- **Agent ID**: Your authenticated agent
+- **Status**: `online`
+
+### Real-time Updates
+
+The proxy refreshes service routes every 10 seconds:
+
+```typescript
+// Auto-refresh for dynamic service discovery
+const hubRefreshInterval = setInterval(refreshAll, 10000);
+
+async function refreshAll() {
+  const response = await fetch(`${hubUrl}/v1/services`, {
+    headers: { 'x-api-key': config.apiKey },
+  });
+  if (response.ok) hubServices = await response.json();
+  
+  activeRoutes = loadActiveRoutes();
+  routes = buildRouteTable(hubServices, activeRoutes);
+}
+```
+
+## Multi-Agent Coordination
+
+### Reach Multiple Services
+
+Connect to multiple remote services simultaneously:
+
+```yaml
+# pconnect.yml
+services:
+  - name: staging-db
+    port: 5432
+  - name: staging-redis
+    port: 6379
+  - name: staging-api
+    port: 8080
+```
+
+```bash
+connect dev
+```
+
+Outputs:
+
+```bash
+🚀 Private Connect Dev Mode
+
+  Config: pconnect.yml
+  Hub:    https://hub.privateconnect.io
+
+  Connecting to services...
+
+  [ok] 3 service(s) connected:
+
+    staging-db → localhost:5432
+    staging-redis → localhost:6379
+    staging-api → localhost:8080
+
+  Press Ctrl+C to disconnect all services
+```
+
+### Route Table Management
+
+<Steps>
+  <Step title="Hub Services">
+    Services exposed by other agents through the hub
+    
+    ```typescript
+    for (const s of hubServices) {
+      if (s.tunnelPort) {
+        table.set(s.name.toLowerCase(), {
+          name: s.name,
+          host: '127.0.0.1',
+          port: s.tunnelPort,
+          source: 'hub',
+        });
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Local Routes">
+    Services you're reaching via `connect reach`
+    
+    ```typescript
+    for (const r of activeRoutes) {
+      table.set(r.serviceName.toLowerCase(), {
+        name: r.serviceName,
+        host: '127.0.0.1',
+        port: r.localPort,
+        source: 'local',
+      });
+    }
+    ```
+  </Step>
+  
+  <Step title="Route Resolution">
+    Subdomain requests are routed through the table:
+    
+    ```typescript
+    function findRoute(routes: Map<string, RouteTarget>, hostname: string) {
+      const subdomain = hostname.split('.')[0].toLowerCase();
+      return routes.get(subdomain) || null;
+    }
+    ```
+  </Step>
+</Steps>
+
+## File-based Orchestration
+
+### Active Routes Tracking
+
+Private Connect maintains a file-based state for active routes:
+
+```json
+// ~/.connect/active-routes.json
+[
+  {
+    "serviceName": "staging-db",
+    "localPort": 5432,
+    "pid": 12345,
+    "startedAt": "2026-03-02T10:30:00Z"
+  },
+  {
+    "serviceName": "staging-api",
+    "localPort": 8080,
+    "pid": 12346,
+    "startedAt": "2026-03-02T10:30:01Z"
+  }
+]
+```
+
+### File Watching for Dynamic Updates
+
+The proxy watches for route changes:
+
+```typescript
+const routeWatcher = fs.watch(routesDir, (event, filename) => {
+  if (filename === 'active-routes.json') {
+    activeRoutes = loadActiveRoutes();
+    routes = buildRouteTable(hubServices, activeRoutes);
+  }
+});
+```
+
+This enables:
+- Hot-reload when services are added/removed
+- No proxy restart needed
+- Instant route updates
+
+## Peer-to-Peer Discovery
+
+### Service Metadata Exchange
+
+Agents can query service metadata from the hub:
+
+```bash
+curl -H "x-api-key: $API_KEY" https://hub.privateconnect.io/v1/services
+```
+
+Response:
+
+```json
+[
+  {
+    "id": "svc_abc123",
+    "name": "staging-db",
+    "targetPort": 5432,
+    "tunnelPort": 45001,
+    "status": "online",
+    "protocol": "tcp",
+    "agentId": "agent_xyz789",
+    "agentLabel": "production-server",
+    "createdAt": "2026-03-02T10:00:00Z"
+  }
+]
+```
+
+### Direct Tunnel Connections
+
+Once you have the `tunnelPort`, connect directly:
+
+```typescript
+const proxySocket = net.createConnection({
+  host: hubHost,
+  port: tunnelPort,
+}, () => {
+  clientSocket.pipe(proxySocket);
+  proxySocket.pipe(clientSocket);
+});
+```
+
+## Advanced Patterns
+
+### Multi-Region Coordination
+
+```yaml
+# Production setup
+services:
+  # US East database
+  - name: db-us-east
+    port: 5432
+  
+  # EU West database replica
+  - name: db-eu-west
+    port: 5433
+  
+  # Shared cache
+  - name: redis-global
+    port: 6379
+```
+
+### Service Dependencies
+
+```bash
+# Start dependent services in order
+connect reach backend-api 8080
+connect reach frontend 3000
+connect proxy start
+
+# Access via subdomains
+curl http://backend-api.localhost:9999
+curl http://frontend.localhost:9999
+```
+
+### Health Monitoring
+
+```typescript
+// Check if services are reachable
+const isHealthy = await isProxyResponding(port, tls);
+
+if (!isHealthy) {
+  console.error('Service not responding');
+  // Implement retry logic
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Service Naming" icon="tag">
+    Use descriptive, environment-aware names:
+    - `prod-db` not `db`
+    - `staging-api` not `api`
+    - `dev-redis` not `redis`
+  </Card>
+  
+  <Card title="Port Management" icon="network-wired">
+    Let Private Connect auto-select ports to avoid conflicts:
+    ```bash
+    # Port 5432 in use? No problem!
+    connect reach db 5432
+    # → localhost:5433 (auto-selected)
+    ```
+  </Card>
+  
+  <Card title="Configuration Files" icon="file-code">
+    Use `pconnect.yml` for team consistency:
+    ```bash
+    git add pconnect.yml
+    git commit -m "Add Private Connect config"
+    ```
+  </Card>
+  
+  <Card title="Service Discovery" icon="magnifying-glass">
+    Run discovery before exposing:
+    ```bash
+    connect discover
+    connect expose my-service 3000
+    ```
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Routes Not Updating
+
+```bash
+# Check active routes
+cat ~/.connect/active-routes.json
+
+# Restart proxy to force refresh
+connect proxy stop
+connect proxy start
+```
+
+### Service Not Discovered
+
+```bash
+# Verify port is open
+lsof -i :5432
+
+# Test manual connection
+telnet localhost 5432
+
+# Force custom port scan
+connect discover --ports 5432
+```
+
+### Hub Communication Issues
+
+```bash
+# Check agent status
+connect whoami
+
+# Test hub connectivity
+curl https://hub.privateconnect.io/health
+
+# View agent logs
+connect daemon logs
+```

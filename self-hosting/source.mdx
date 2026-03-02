@@ -1,0 +1,579 @@
+---
+title: Building from Source
+description: Build and deploy Private Connect components from source code
+---
+
+For maximum control and customization, you can build and run Private Connect components directly from source.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install Node.js">
+    Private Connect requires Node.js v18.0.0 or higher:
+    
+    ```bash
+    # Check Node.js version
+    node --version  # Should be v18.0.0+
+    
+    # Install Node.js if needed (using nvm)
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+    nvm install 18
+    nvm use 18
+    ```
+  </Step>
+  
+  <Step title="Install pnpm">
+    Private Connect uses pnpm as its package manager:
+    
+    ```bash
+    npm install -g pnpm@9.15.1
+    
+    # Verify installation
+    pnpm --version
+    ```
+  </Step>
+  
+  <Step title="Install PostgreSQL">
+    Install PostgreSQL 16 or higher:
+    
+    ```bash
+    # Ubuntu/Debian
+    sudo apt update
+    sudo apt install postgresql-16 postgresql-contrib-16
+    
+    # macOS (using Homebrew)
+    brew install postgresql@16
+    brew services start postgresql@16
+    
+    # Verify installation
+    psql --version
+    ```
+  </Step>
+  
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/treadiehq/private-connect.git
+    cd private-connect
+    ```
+  </Step>
+</Steps>
+
+## Project Structure
+
+The repository is a monorepo with the following structure:
+
+```
+private-connect/
+├── apps/
+│   ├── api/          # NestJS backend (API Hub)
+│   ├── web/          # Nuxt frontend (Dashboard)
+│   └── agent/        # CLI agent (connect command)
+├── packages/
+│   └── sdk/          # TypeScript SDK
+├── docker-compose.yml
+└── package.json
+```
+
+## Database Setup
+
+<Steps>
+  <Step title="Create database">
+    Create a PostgreSQL database:
+    
+    ```bash
+    # Connect to PostgreSQL
+    sudo -u postgres psql
+    
+    # Create user and database
+    CREATE USER privateconnect WITH PASSWORD 'privateconnect';
+    CREATE DATABASE privateconnect OWNER privateconnect;
+    \q
+    ```
+  </Step>
+  
+  <Step title="Configure database connection">
+    Create `apps/api/.env` with your database credentials:
+    
+    ```bash
+    cd apps/api
+    cp .env.example .env
+    ```
+    
+    Edit `apps/api/.env`:
+    ```bash
+    DATABASE_URL="postgresql://privateconnect:privateconnect@localhost:5432/privateconnect"
+    PORT=3001
+    NODE_ENV=development
+    ```
+  </Step>
+  
+  <Step title="Run database migrations">
+    Generate Prisma client and push schema:
+    
+    ```bash
+    cd apps/api
+    pnpm install
+    pnpm db:generate
+    pnpm db:push
+    ```
+    
+    This creates all tables, indexes, and relations defined in `apps/api/prisma/schema.prisma`.
+  </Step>
+</Steps>
+
+## Build and Run API Hub
+
+<Steps>
+  <Step title="Install dependencies">
+    Install all workspace dependencies:
+    
+    ```bash
+    cd /path/to/private-connect
+    pnpm install
+    ```
+  </Step>
+  
+  <Step title="Build the API">
+    Build the NestJS API:
+    
+    ```bash
+    pnpm --filter api build
+    ```
+    
+    This compiles TypeScript to `apps/api/dist/`.
+  </Step>
+  
+  <Step title="Run in development mode">
+    Start the API with hot-reload:
+    
+    ```bash
+    pnpm dev:api
+    ```
+    
+    Or use the workspace script:
+    ```bash
+    pnpm --filter api dev
+    ```
+    
+    The API will be available at `http://localhost:3001`.
+  </Step>
+  
+  <Step title="Run in production mode">
+    Start the built API:
+    
+    ```bash
+    cd apps/api
+    pnpm start:prod
+    ```
+    
+    Or directly:
+    ```bash
+    node apps/api/dist/main.js
+    ```
+  </Step>
+</Steps>
+
+## Build and Run Web UI
+
+<Steps>
+  <Step title="Configure API endpoint">
+    Create `apps/web/.env`:
+    
+    ```bash
+    cd apps/web
+    cp .env.example .env
+    ```
+    
+    Edit `apps/web/.env`:
+    ```bash
+    NUXT_PUBLIC_API_URL="http://localhost:3001"
+    ```
+  </Step>
+  
+  <Step title="Build the web UI">
+    ```bash
+    pnpm --filter web build
+    ```
+    
+    This creates a production build in `apps/web/.output/`.
+  </Step>
+  
+  <Step title="Run in development mode">
+    Start the Nuxt dev server:
+    
+    ```bash
+    pnpm dev:web
+    ```
+    
+    The UI will be available at `http://localhost:3000`.
+  </Step>
+  
+  <Step title="Run in production mode">
+    Start the production server:
+    
+    ```bash
+    cd apps/web
+    node .output/server/index.mjs
+    ```
+  </Step>
+</Steps>
+
+## Build CLI Agent
+
+The CLI agent is the `connect` command that users run on their machines.
+
+<Steps>
+  <Step title="Build TypeScript version">
+    Compile the agent to JavaScript:
+    
+    ```bash
+    pnpm --filter agent build
+    ```
+    
+    This creates `apps/agent/dist/cli.js`.
+  </Step>
+  
+  <Step title="Run the agent">
+    ```bash
+    cd apps/agent
+    node dist/cli.js --help
+    ```
+  </Step>
+  
+  <Step title="Build standalone binary">
+    Create a native binary using Bun:
+    
+    ```bash
+    # Install Bun (if not already installed)
+    curl -fsSL https://bun.sh/install | bash
+    
+    # Build binary for current platform
+    cd apps/agent
+    bun build src/cli.ts --compile --outfile=bin/connect
+    
+    # Or build for all platforms
+    pnpm build:binary:all
+    ```
+    
+    This creates platform-specific binaries:
+    - `bin/connect-linux-x64`
+    - `bin/connect-linux-arm64`
+    - `bin/connect-darwin-x64`
+    - `bin/connect-darwin-arm64`
+  </Step>
+  
+  <Step title="Install agent globally">
+    Make the binary available system-wide:
+    
+    ```bash
+    sudo cp apps/agent/bin/connect /usr/local/bin/connect
+    sudo chmod +x /usr/local/bin/connect
+    
+    # Verify
+    connect --version
+    ```
+  </Step>
+  
+  <Step title="Configure agent">
+    Point the agent to your self-hosted hub:
+    
+    ```bash
+    # Option 1: Environment variable
+    export CONNECT_HUB_URL="http://localhost:3001"
+    
+    # Option 2: Command-line flag
+    connect up --hub http://localhost:3001
+    ```
+  </Step>
+</Steps>
+
+## Available Scripts
+
+The root `package.json` includes convenient scripts:
+
+### Development
+
+```bash
+# Run API and Web in parallel
+pnpm dev
+
+# Run API only
+pnpm dev:api
+
+# Run Web only
+pnpm dev:web
+```
+
+### Building
+
+```bash
+# Build all components
+pnpm build
+
+# Build agent binary
+pnpm build:agent
+
+# Build specific workspace
+pnpm --filter api build
+pnpm --filter web build
+pnpm --filter agent build
+```
+
+### Database Management
+
+```bash
+# Generate Prisma client
+pnpm --filter api db:generate
+
+# Push schema to database
+pnpm --filter api db:push
+
+# Open Prisma Studio
+pnpm db:studio
+
+# Reset database (⚠️ DELETES ALL DATA)
+pnpm db:reset
+```
+
+### Docker
+
+```bash
+# Start with Docker Compose
+pnpm docker:up
+
+# Stop containers
+pnpm docker:down
+
+# View logs
+pnpm docker:logs
+
+# Rebuild containers
+pnpm docker:rebuild
+```
+
+## Running All Components
+
+<Steps>
+  <Step title="Start PostgreSQL">
+    Ensure PostgreSQL is running:
+    
+    ```bash
+    # Check status
+    sudo systemctl status postgresql
+    
+    # Start if not running
+    sudo systemctl start postgresql
+    ```
+  </Step>
+  
+  <Step title="Start API and Web">
+    Run both in parallel:
+    
+    ```bash
+    pnpm dev
+    ```
+    
+    Or use separate terminals:
+    ```bash
+    # Terminal 1: API
+    pnpm dev:api
+    
+    # Terminal 2: Web
+    pnpm dev:web
+    ```
+  </Step>
+  
+  <Step title="Verify services">
+    Check that services are running:
+    
+    ```bash
+    # API health check
+    curl http://localhost:3001/v1/agents
+    
+    # Web UI
+    open http://localhost:3000
+    ```
+  </Step>
+  
+  <Step title="Connect an agent">
+    Test the full stack by connecting an agent:
+    
+    ```bash
+    # Build and run agent
+    cd apps/agent
+    CONNECT_HUB_URL="http://localhost:3001" node dist/cli.js up
+    ```
+  </Step>
+</Steps>
+
+## Production Deployment
+
+### Using PM2 (Process Manager)
+
+<Steps>
+  <Step title="Install PM2">
+    ```bash
+    npm install -g pm2
+    ```
+  </Step>
+  
+  <Step title="Create ecosystem config">
+    Create `ecosystem.config.js`:
+    
+    ```javascript
+    module.exports = {
+      apps: [
+        {
+          name: 'privateconnect-api',
+          cwd: './apps/api',
+          script: 'dist/main.js',
+          env: {
+            NODE_ENV: 'production',
+            PORT: 3001,
+            DATABASE_URL: 'postgresql://privateconnect:password@localhost:5432/privateconnect'
+          },
+          instances: 2,
+          exec_mode: 'cluster'
+        },
+        {
+          name: 'privateconnect-web',
+          cwd: './apps/web',
+          script: '.output/server/index.mjs',
+          env: {
+            NODE_ENV: 'production',
+            NUXT_PUBLIC_API_URL: 'http://localhost:3001'
+          }
+        }
+      ]
+    };
+    ```
+  </Step>
+  
+  <Step title="Start services">
+    ```bash
+    pm2 start ecosystem.config.js
+    pm2 save
+    pm2 startup  # Enable auto-start on boot
+    ```
+  </Step>
+  
+  <Step title="Monitor services">
+    ```bash
+    pm2 status
+    pm2 logs
+    pm2 monit
+    ```
+  </Step>
+</Steps>
+
+### Using systemd (Linux)
+
+Create `/etc/systemd/system/privateconnect-api.service`:
+
+```ini
+[Unit]
+Description=Private Connect API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=privateconnect
+WorkingDirectory=/opt/private-connect/apps/api
+Environment="NODE_ENV=production"
+Environment="PORT=3001"
+Environment="DATABASE_URL=postgresql://privateconnect:password@localhost:5432/privateconnect"
+ExecStart=/usr/bin/node dist/main.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+```bash
+sudo systemctl enable privateconnect-api
+sudo systemctl start privateconnect-api
+sudo systemctl status privateconnect-api
+```
+
+## Environment Variables Reference
+
+### API Hub (`apps/api/.env`)
+
+```bash
+# Required
+DATABASE_URL="postgresql://user:password@host:port/database"
+PORT=3001
+
+# Production
+NODE_ENV=production
+APP_URL="https://yourdomain.com"
+
+# Email authentication
+RESEND_API_KEY=re_xxxxxxxxxxxx
+EMAIL_FROM="Private Connect <noreply@yourdomain.com>"
+
+# AI/LLM features
+ASK_LLM_PROVIDER=openai
+ASK_LLM_MODEL=gpt-4o-mini
+ASK_LLM_API_KEY=sk-xxxxxxxxxxxx
+ASK_LLM_OLLAMA_URL=http://localhost:11434
+```
+
+### Web UI (`apps/web/.env`)
+
+```bash
+NUXT_PUBLIC_API_URL="http://localhost:3001"
+```
+
+### Agent (`apps/agent/.env` or environment)
+
+```bash
+CONNECT_HUB_URL="http://localhost:3001"
+```
+
+## Troubleshooting
+
+### Build failures
+
+Clear dependencies and rebuild:
+```bash
+rm -rf node_modules apps/*/node_modules
+pnpm install
+pnpm build
+```
+
+### Database connection errors
+
+Verify PostgreSQL is running and credentials are correct:
+```bash
+psql -U privateconnect -d privateconnect -h localhost -p 5432
+```
+
+### Port already in use
+
+Find and kill the process using the port:
+```bash
+lsof -ti:3001 | xargs kill -9
+lsof -ti:3000 | xargs kill -9
+```
+
+### Prisma errors
+
+Regenerate Prisma client:
+```bash
+cd apps/api
+rm -rf node_modules/.prisma
+pnpm db:generate
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Connect Your First Agent" icon="link" href="/quickstart">
+    Connect an agent to your self-hosted hub
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference">
+    Explore the REST API endpoints
+  </Card>
+</CardGroup>

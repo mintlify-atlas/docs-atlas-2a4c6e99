@@ -1,0 +1,442 @@
+---
+title: connect daemon
+description: Manage the Private Connect background daemon
+---
+
+The `connect daemon` command manages the Private Connect agent as a system service that runs in the background.
+
+## Usage
+
+```bash
+connect daemon [action] [options]
+```
+
+## Actions
+
+<ParamField path="install">
+  Install daemon as a system service (launchd on macOS, systemd on Linux)
+</ParamField>
+
+<ParamField path="uninstall">
+  Remove daemon from system services
+</ParamField>
+
+<ParamField path="start">
+  Start the daemon
+</ParamField>
+
+<ParamField path="stop">
+  Stop the daemon
+</ParamField>
+
+<ParamField path="restart">
+  Restart the daemon
+</ParamField>
+
+<ParamField path="status" default>
+  Show daemon status (default action)
+</ParamField>
+
+<ParamField path="logs">
+  Display daemon logs
+</ParamField>
+
+## Options
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--replace" type="boolean" default={false}>
+  Stop existing daemon before starting new one
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+## Examples
+
+### Install as System Service
+
+```bash
+connect daemon install
+```
+
+Output (macOS):
+```
+🔧 Installing Private Connect daemon...
+
+  Created: ~/Library/LaunchAgents/co.privateconnect.agent.plist
+
+[ok] Daemon installed and started
+  The agent will now start automatically on login.
+
+  Commands:
+    Status:    connect daemon status
+    Logs:      connect daemon logs
+    Stop:      connect daemon stop
+    Uninstall: connect daemon uninstall
+```
+
+Output (Linux):
+```
+🔧 Installing Private Connect daemon...
+
+  Created: ~/.config/systemd/user/private-connect.service
+
+[ok] Daemon installed and started
+  The agent will now start automatically on boot.
+
+  Commands:
+    Status:    connect daemon status
+    Logs:      connect daemon logs  
+    Stop:      connect daemon stop
+    Uninstall: connect daemon uninstall
+```
+
+### Check Status
+
+```bash
+connect daemon status
+```
+
+Output:
+```
+📊 Private Connect Daemon Status
+
+  ● Status: running
+    PID: 12345
+    Service installed: yes
+    Platform: darwin
+    Agent ID: agent_xxx
+    Label: alex-macbook
+    Hub: https://hub.privateconnect.co
+```
+
+### View Logs
+
+```bash
+connect daemon logs
+```
+
+Output:
+```
+📋 Daemon Logs (~/.privateconnect/daemon.log)
+
+────────────────────────────────────────────────────────
+[10:30:00] 🚀 Starting Private Connect Agent...
+[10:30:01] [ok] Registered with hub
+[10:30:01] [ok] Connected to hub via WebSocket
+[10:30:15] Dialing localhost:5432 for connection a1b2c3d4...
+[10:30:15] [ok] Connected to localhost:5432
+────────────────────────────────────────────────────────
+
+  Showing last 50 lines. Full log: ~/.privateconnect/daemon.log
+```
+
+### Stop Daemon
+
+```bash
+connect daemon stop
+```
+
+Output:
+```
+[ok] Daemon stopped
+```
+
+### Restart Daemon
+
+```bash
+connect daemon restart
+```
+
+Output:
+```
+[ok] Daemon stopped
+[ok] Daemon started
+```
+
+### Uninstall
+
+```bash
+connect daemon uninstall
+```
+
+Output:
+```
+🔧 Uninstalling Private Connect daemon...
+
+  Removed: ~/Library/LaunchAgents/co.privateconnect.agent.plist
+
+[ok] Daemon uninstalled
+```
+
+## Behavior
+
+### System Service (Installed)
+
+When installed as a system service:
+
+**macOS (launchd):**
+- Plist file: `~/Library/LaunchAgents/co.privateconnect.agent.plist`
+- Auto-starts on login
+- Monitored and restarted on crashes
+- Throttled to prevent rapid restart loops (10 second delay)
+
+**Linux (systemd):**
+- Service file: `~/.config/systemd/user/private-connect.service`  
+- Auto-starts on boot (with lingering enabled)
+- Monitored and restarted on crashes
+- Restart delay: 10 seconds
+
+### Background Process (Not Installed)
+
+Without installation, `connect daemon start` runs as a background process:
+
+```bash
+connect daemon start
+```
+
+Output:
+```
+🚀 Starting daemon in background...
+
+[ok] Daemon started (PID: 12345)
+  Logs: ~/.privateconnect/daemon.log
+```
+
+Process details:
+- Detached from terminal
+- Logs to `~/.privateconnect/daemon.log`
+- PID tracked in `~/.privateconnect/daemon.pid`
+- No auto-restart on crash
+- Stops when system reboots
+
+### Process Management
+
+The daemon is started with:
+
+```bash
+node /path/to/connect up --hub https://hub.privateconnect.co
+```
+
+Environment variable `CONNECT_DAEMON=1` is set to indicate daemon mode.
+
+### Startup Verification
+
+When starting the daemon, the CLI:
+
+1. Spawns the process
+2. Waits up to 3 seconds for it to stabilize
+3. Verifies the process is still running
+4. Reports success or failure
+
+If the daemon crashes immediately:
+
+```
+[x] Daemon failed to start: Process exited with code 1
+  Check logs: ~/.privateconnect/daemon.log
+```
+
+### Graceful Shutdown
+
+When stopping:
+
+1. **SIGTERM** sent to process (graceful shutdown)
+2. Wait up to 5 seconds for clean exit
+3. **SIGKILL** if still running (force kill)
+4. PID file cleaned up
+
+### Stale PID Handling
+
+If PID file exists but process is not running:
+
+```bash
+connect daemon status
+```
+
+Output:
+```
+○ Status: stopped
+  (cleaned up stale PID file)
+```
+
+The stale PID file is automatically removed.
+
+## Configuration Files
+
+### macOS (launchd)
+
+`~/Library/LaunchAgents/co.privateconnect.agent.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>co.privateconnect.agent</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/connect</string>
+        <string>up</string>
+        <string>--hub</string>
+        <string>https://hub.privateconnect.co</string>
+    </array>
+    
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>NetworkState</key>
+        <true/>
+    </dict>
+    
+    <key>StandardOutPath</key>
+    <string>~/.privateconnect/daemon.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>~/.privateconnect/daemon.log</string>
+    
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>
+```
+
+### Linux (systemd)
+
+`~/.config/systemd/user/private-connect.service`:
+
+```ini
+[Unit]
+Description=Private Connect Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/connect up --hub https://hub.privateconnect.co
+Restart=always
+RestartSec=10
+StandardOutput=append:~/.privateconnect/daemon.log
+StandardError=append:~/.privateconnect/daemon.log
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target
+```
+
+## Exit Codes
+
+- `0` - Command executed successfully
+- `1` - Daemon not configured, failed to start/stop, or platform unsupported
+
+## Platform Support
+
+<ParamField path="macOS" type="supported">
+  Full support via launchd
+</ParamField>
+
+<ParamField path="Linux" type="supported">
+  Full support via systemd (user services)
+</ParamField>
+
+<ParamField path="Windows" type="unsupported">
+  Not currently supported (use foreground mode: `connect up`)
+</ParamField>
+
+## Use Cases
+
+### Always-On Development Environment
+
+Install daemon to keep services accessible:
+
+```bash
+connect up  # First-time auth
+connect daemon install
+connect expose localhost:5432 --name postgres
+# Daemon keeps it running even after reboot
+```
+
+### CI/CD Agents
+
+Run agent as a service on build servers:
+
+```bash
+export PRIVATECONNECT_TOKEN=tok_xxx
+connect up
+connect daemon install
+# Agent provides access to private resources during builds
+```
+
+### Remote Development Machines
+
+Keep agent running on cloud instances:
+
+```bash
+ssh dev-server
+connect daemon install
+connect expose localhost:3000 --name staging-api
+# API stays accessible even when you disconnect
+```
+
+## Related Commands
+
+- [`connect up`](/cli/up) - Start agent (must run once before daemon install)
+- [`connect expose`](/cli/expose) - Expose services via daemon
+- [`connect proxy`](/cli/proxy) - Similar daemon management for proxy
+
+## Troubleshooting
+
+### Daemon Won't Start
+
+Check logs:
+```bash
+connect daemon logs
+```
+
+Common issues:
+- Not authenticated (run `connect up` first)
+- Network connectivity problems
+- Hub URL incorrect
+- Port conflicts
+
+### Permission Denied (Linux)
+
+For systemd lingering:
+```bash
+loginctl enable-linger $USER
+```
+
+### Service Not Auto-Starting
+
+**macOS:**
+```bash
+launchctl list | grep privateconnect
+launchctl load ~/Library/LaunchAgents/co.privateconnect.agent.plist
+```
+
+**Linux:**
+```bash
+systemctl --user status private-connect
+systemctl --user enable private-connect
+```
+
+### High CPU Usage
+
+Check for reconnection loops in logs:
+```bash
+connect daemon logs | grep -i reconnect
+```
+
+If constantly reconnecting:
+- Check network stability
+- Verify hub is accessible
+- Check for firewall blocking WebSocket connections

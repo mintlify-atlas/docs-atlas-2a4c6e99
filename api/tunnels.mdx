@@ -1,0 +1,404 @@
+---
+title: 'Tunnels API'
+description: 'Create and manage secure tunnels for service connectivity'
+---
+
+## Overview
+
+Tunnels represent active connections that expose services through agents. The Tunnels API provides programmatic equivalents to `connect expose` and `connect reach` CLI commands.
+
+## Create Tunnel
+
+Create a new tunnel to expose a service (equivalent to `connect expose`).
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.privateconnect.co/v1/tunnels \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target": "localhost:5432",
+    "name": "prod-db",
+    "protocol": "tcp",
+    "agentId": "550e8400-e29b-41d4-a716-446655440000",
+    "isPublic": false
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.privateconnect.co/v1/tunnels', {
+  method: 'POST',
+  headers: {
+    'x-api-key': 'pc_your_api_key',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    target: 'localhost:5432',
+    agentId: '550e8400-e29b-41d4-a716-446655440000',
+    name: 'prod-db'
+  })
+});
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.privateconnect.co/v1/tunnels',
+    headers={'x-api-key': 'pc_your_api_key'},
+    json={
+        'target': 'localhost:5432',
+        'agentId': '550e8400-e29b-41d4-a716-446655440000',
+        'name': 'prod-db'
+    }
+)
+data = response.json()
+```
+</CodeGroup>
+
+**Request Body:**
+
+<ParamField body="target" type="string | object" required>
+  Target service in `host:port` format, or object with `host` and `port` fields
+  <Expandable title="Object Format">
+    ```json
+    {
+      "host": "localhost",
+      "port": 5432
+    }
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField body="agentId" type="string" required>
+  UUID of the agent that will expose this service
+</ParamField>
+
+<ParamField body="name" type="string">
+  Tunnel name (auto-generated if not provided). 1-100 characters.
+</ParamField>
+
+<ParamField body="protocol" type="string" default="auto">
+  Protocol: `auto`, `tcp`, `udp`, `http`, `https`
+</ParamField>
+
+<ParamField body="isPublic" type="boolean" default="false">
+  Make publicly accessible via generated URL
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": "tun_123",
+  "name": "prod-db",
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "targetHost": "localhost",
+  "targetPort": 5432,
+  "tunnelPort": 50123,
+  "protocol": "tcp",
+  "status": "active",
+  "isPublic": false,
+  "createdAt": "2026-03-02T10:00:00.000Z"
+}
+```
+
+<ResponseField name="tunnelPort" type="number">
+  Port on the hub where the tunnel is accessible
+</ResponseField>
+
+## List Tunnels
+
+Retrieve all active tunnels in the workspace.
+
+```bash
+curl https://api.privateconnect.co/v1/tunnels \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "tun_123",
+    "name": "prod-db",
+    "agentId": "550e8400-e29b-41d4-a716-446655440000",
+    "targetHost": "localhost",
+    "targetPort": 5432,
+    "tunnelPort": 50123,
+    "protocol": "tcp",
+    "status": "active",
+    "isPublic": false,
+    "createdAt": "2026-03-02T10:00:00.000Z"
+  }
+]
+```
+
+## Get Tunnel Details
+
+Retrieve details for a specific tunnel.
+
+```bash
+curl https://api.privateconnect.co/v1/tunnels/tun_123 \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "id": "tun_123",
+  "name": "prod-db",
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "targetHost": "localhost",
+  "targetPort": 5432,
+  "tunnelPort": 50123,
+  "protocol": "tcp",
+  "status": "active",
+  "isPublic": false,
+  "publicUrl": null,
+  "metadata": {},
+  "createdAt": "2026-03-02T10:00:00.000Z",
+  "lastActivityAt": "2026-03-02T10:05:00.000Z"
+}
+```
+
+## Update Tunnel
+
+Update tunnel properties like name, status, or metadata.
+
+```bash
+curl -X PATCH https://api.privateconnect.co/v1/tunnels/tun_123 \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "production-database",
+    "status": "active",
+    "metadata": { "environment": "production" }
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="name" type="string">
+  New tunnel name (1-100 characters)
+</ParamField>
+
+<ParamField body="status" type="string">
+  Tunnel status: `active` or `paused`
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata (any JSON object)
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": "tun_123",
+  "name": "production-database",
+  "status": "active",
+  "metadata": { "environment": "production" }
+}
+```
+
+## Delete Tunnel
+
+Delete a tunnel (equivalent to revoking/closing the exposed service).
+
+```bash
+curl -X DELETE https://api.privateconnect.co/v1/tunnels/tun_123 \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+<Warning>
+  Deleting a tunnel immediately closes all active connections. Any shares using this tunnel will stop working.
+</Warning>
+
+## Connect to Tunnel
+
+Initiate a connection to a tunnel (equivalent to `connect reach`).
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/tunnels/tun_123/connect \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentId": "660e8400-e29b-41d4-a716-446655440001",
+    "localPort": 5432
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="agentId" type="string" required>
+  UUID of the agent that will receive the tunnel
+</ParamField>
+
+<ParamField body="localPort" type="number">
+  Local port to bind (optional, uses target port if not specified)
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "tunnel": {
+    "id": "tun_123",
+    "name": "prod-db",
+    "targetHost": "localhost",
+    "targetPort": 5432,
+    "localPort": 5432,
+    "tunnelPort": 50123
+  },
+  "connectionString": "postgres://localhost:5432/postgres",
+  "message": "Tunnel active on port 50123"
+}
+```
+
+<ResponseField name="connectionString" type="string">
+  Connection string formatted for the detected protocol (PostgreSQL, MySQL, Redis, MongoDB, HTTP, or generic TCP)
+</ResponseField>
+
+## Create Share for Tunnel
+
+Create a shareable link for a tunnel (equivalent to `connect share`).
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/tunnels/tun_123/share \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "contractor-access",
+    "description": "Temporary access for external team",
+    "expiresIn": "24h",
+    "allowedMethods": ["GET", "POST"],
+    "rateLimitPerMin": 100
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="name" type="string" required>
+  Share name (1-100 characters)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Share description (max 500 characters)
+</ParamField>
+
+<ParamField body="expiresIn" type="string" default="24h">
+  Expiration duration: `1h`, `24h`, `7d`, `30d`, `never`
+</ParamField>
+
+<ParamField body="allowedMethods" type="string[]">
+  HTTP methods to allow (for HTTP/HTTPS tunnels). Example: `["GET", "POST"]`
+</ParamField>
+
+<ParamField body="rateLimitPerMin" type="number">
+  Rate limit per minute (1-1000)
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": "share_123",
+  "token": "share_tok_1234567890abcdefghijklmnop",
+  "name": "contractor-access",
+  "expiresAt": "2026-03-03T10:00:00.000Z",
+  "shareUrl": "https://link.privateconnect.co/shared/share_tok_1234567890abcdefghijklmnop"
+}
+```
+
+<Note>
+  Save the `shareUrl` - it's the link you'll send to users for accessing the tunnel.
+</Note>
+
+## Tunnel Status Values
+
+Tunnels have the following status values:
+
+- `active` - Tunnel is running and accepting connections
+- `paused` - Tunnel exists but is not accepting connections
+- `connecting` - Tunnel is being established
+- `error` - Tunnel encountered an error
+
+## Connection Strings
+
+The API automatically generates protocol-specific connection strings:
+
+<AccordionGroup>
+  <Accordion title="PostgreSQL (port 5432)">
+    ```
+    postgres://localhost:5432/postgres
+    ```
+  </Accordion>
+
+  <Accordion title="MySQL (port 3306)">
+    ```
+    mysql://localhost:3306
+    ```
+  </Accordion>
+
+  <Accordion title="Redis (port 6379)">
+    ```
+    redis://localhost:6379
+    ```
+  </Accordion>
+
+  <Accordion title="MongoDB (port 27017)">
+    ```
+    mongodb://localhost:27017
+    ```
+  </Accordion>
+
+  <Accordion title="HTTP/HTTPS">
+    ```
+    https://localhost:8443
+    ```
+  </Accordion>
+
+  <Accordion title="Generic TCP">
+    ```
+    tcp://localhost:50123
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Database Access" icon="database">
+    Expose development or staging databases for team access without VPN.
+  </Card>
+  <Card title="API Testing" icon="flask">
+    Share local APIs with external testers or clients.
+  </Card>
+  <Card title="Demo Environments" icon="presentation-screen">
+    Create temporary tunnels for product demos.
+  </Card>
+  <Card title="CI/CD Integration" icon="gears">
+    Programmatically create tunnels for automated testing pipelines.
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+1. **Use descriptive names** - Name tunnels after their purpose: `staging-api`, `prod-db-readonly`
+2. **Set appropriate TTLs** - Use short-lived tunnels for temporary access, long-lived for permanent services
+3. **Monitor usage** - Use webhooks to track tunnel creation and deletion events
+4. **Clean up** - Delete tunnels when they're no longer needed to reduce overhead
+5. **Use shares** - For external access, create shares with access control instead of making tunnels public

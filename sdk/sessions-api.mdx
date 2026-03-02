@@ -1,0 +1,516 @@
+---
+title: 'Sessions API'
+description: 'Ephemeral orchestration sessions for multi-agent workflows'
+---
+
+The Sessions API enables creation and management of ephemeral orchestration sessions. Use sessions to coordinate multi-agent workflows with automatic cleanup and time-to-live (TTL) management.
+
+## Overview
+
+Access the Sessions API through the `sessions` property:
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: 'your-api-key' });
+
+const session = await pc.sessions.create('deployment-workflow', {
+  ttlMinutes: 30,
+});
+```
+
+## Methods
+
+### create()
+
+Create an orchestration session.
+
+```typescript
+create(
+  name: string, 
+  options?: { 
+    ttlMinutes?: number; 
+    metadata?: Record<string, unknown> 
+  }
+): Promise<Session>
+```
+
+<ParamField path="name" type="string" required>
+  Human-readable session name
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional session configuration
+  
+  <Expandable title="properties">
+    <ParamField path="ttlMinutes" type="number" default={60}>
+      Session time-to-live in minutes. After this duration, the session expires.
+    </ParamField>
+    
+    <ParamField path="metadata" type="object">
+      Arbitrary metadata to attach to the session. Can include workflow parameters, user info, etc.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="Session" type="Session">
+  Created session object
+  
+  <Expandable title="Session properties">
+    <ResponseField name="id" type="string">
+      Unique session identifier
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Session name
+    </ResponseField>
+    
+    <ResponseField name="createdBy" type="string">
+      Agent ID that created the session
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO timestamp when session was created
+    </ResponseField>
+    
+    <ResponseField name="expiresAt" type="string">
+      ISO timestamp when session will expire
+    </ResponseField>
+    
+    <ResponseField name="metadata" type="object | undefined">
+      Session metadata
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Note>
+  Session creation automatically broadcasts a `session:created` event to all online agents on the `orchestration` channel.
+</Note>
+
+#### Example
+
+<Tabs>
+  <Tab title="Basic Session">
+    ```typescript
+    const session = await pc.sessions.create('deployment-workflow');
+    
+    console.log(`Session created: ${session.id}`);
+    console.log(`Expires at: ${session.expiresAt}`);
+    ```
+  </Tab>
+  
+  <Tab title="With TTL">
+    ```typescript
+    // Session expires after 2 hours
+    const session = await pc.sessions.create('long-running-task', {
+      ttlMinutes: 120,
+    });
+    
+    console.log(`Session will expire in 120 minutes`);
+    ```
+  </Tab>
+  
+  <Tab title="With Metadata">
+    ```typescript
+    const session = await pc.sessions.create('deployment', {
+      ttlMinutes: 30,
+      metadata: {
+        environment: 'production',
+        version: '1.2.3',
+        initiatedBy: 'alice@example.com',
+        services: ['api', 'worker', 'frontend'],
+      },
+    });
+    
+    console.log('Session metadata:', session.metadata);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### end()
+
+End an orchestration session.
+
+```typescript
+end(sessionId: string): Promise<void>
+```
+
+<ParamField path="sessionId" type="string" required>
+  Session ID to end
+</ParamField>
+
+<Note>
+  Session end automatically broadcasts a `session:ended` event to all online agents on the `orchestration` channel.
+</Note>
+
+#### Example
+
+```typescript
+const session = await pc.sessions.create('deployment-workflow');
+
+try {
+  // Perform workflow tasks
+  console.log('Starting deployment...');
+  await performDeployment();
+  console.log('Deployment complete');
+} finally {
+  // Always end the session
+  await pc.sessions.end(session.id);
+  console.log('Session ended');
+}
+```
+
+---
+
+### getActive()
+
+Get all active sessions (not expired).
+
+```typescript
+getActive(): Session[]
+```
+
+<ResponseField name="Session[]" type="Session[]">
+  Array of active sessions. Automatically filters out expired sessions.
+</ResponseField>
+
+#### Example
+
+```typescript
+const active = pc.sessions.getActive();
+
+console.log(`${active.length} active sessions:`);
+
+active.forEach(session => {
+  console.log(`  ${session.name} (${session.id})`);
+  console.log(`    Created: ${session.createdAt}`);
+  console.log(`    Expires: ${session.expiresAt}`);
+  
+  if (session.metadata) {
+    console.log(`    Metadata:`, session.metadata);
+  }
+});
+```
+
+---
+
+## Complete Examples
+
+### Deployment Workflow
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ 
+  apiKey: process.env.PRIVATECONNECT_API_KEY!,
+  agentId: 'orchestrator'
+});
+
+async function deployApplication(version: string) {
+  // Create session
+  const session = await pc.sessions.create('deployment', {
+    ttlMinutes: 30,
+    metadata: {
+      version,
+      environment: 'production',
+      timestamp: new Date().toISOString(),
+    },
+  });
+
+  console.log(`Deployment session started: ${session.id}`);
+
+  try {
+    // Find deployment agents
+    const deployers = await pc.agents.findByCapability('deploy');
+    
+    if (deployers.length === 0) {
+      throw new Error('No deployment agents available');
+    }
+
+    // Send deployment request
+    await pc.agents.sendMessage(
+      deployers[0].id,
+      {
+        sessionId: session.id,
+        action: 'deploy',
+        version,
+      },
+      { channel: 'deployments' }
+    );
+
+    console.log('Deployment request sent');
+
+    // Wait for completion (simplified)
+    await new Promise(resolve => setTimeout(resolve, 10000));
+
+    console.log('Deployment complete');
+  } catch (error) {
+    console.error('Deployment failed:', error);
+    throw error;
+  } finally {
+    // Always end the session
+    await pc.sessions.end(session.id);
+    console.log('Session ended');
+  }
+}
+
+await deployApplication('1.2.3');
+```
+
+### Multi-Agent Coordination
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ 
+  apiKey: process.env.PRIVATECONNECT_API_KEY!,
+  agentId: 'coordinator'
+});
+
+async function coordinateDataPipeline() {
+  // Create session for the pipeline
+  const session = await pc.sessions.create('data-pipeline', {
+    ttlMinutes: 60,
+    metadata: {
+      pipeline: 'daily-etl',
+      stages: ['extract', 'transform', 'load'],
+    },
+  });
+
+  console.log(`Pipeline session: ${session.id}`);
+
+  try {
+    // Stage 1: Extract
+    const extractors = await pc.agents.findByCapability('extract');
+    await pc.agents.sendMessage(
+      extractors[0].id,
+      {
+        sessionId: session.id,
+        stage: 'extract',
+        source: 's3://data-lake/raw/',
+      },
+      { channel: 'pipeline' }
+    );
+
+    // Wait for extraction to complete
+    await waitForStage(session.id, 'extract');
+
+    // Stage 2: Transform
+    const transformers = await pc.agents.findByCapability('transform');
+    await pc.agents.sendMessage(
+      transformers[0].id,
+      {
+        sessionId: session.id,
+        stage: 'transform',
+        rules: ['normalize', 'dedupe', 'enrich'],
+      },
+      { channel: 'pipeline' }
+    );
+
+    await waitForStage(session.id, 'transform');
+
+    // Stage 3: Load
+    const loaders = await pc.agents.findByCapability('load');
+    await pc.agents.sendMessage(
+      loaders[0].id,
+      {
+        sessionId: session.id,
+        stage: 'load',
+        destination: 'warehouse',
+      },
+      { channel: 'pipeline' }
+    );
+
+    await waitForStage(session.id, 'load');
+
+    console.log('Pipeline complete');
+  } catch (error) {
+    console.error('Pipeline failed:', error);
+    throw error;
+  } finally {
+    await pc.sessions.end(session.id);
+  }
+}
+
+async function waitForStage(sessionId: string, stage: string) {
+  console.log(`Waiting for ${stage} stage...`);
+  
+  while (true) {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    const messages = await pc.agents.getMessages({
+      channel: 'pipeline',
+      unreadOnly: true,
+    });
+    
+    const completion = messages.find(
+      m => m.payload.sessionId === sessionId && 
+           m.payload.stage === stage &&
+           m.payload.status === 'complete'
+    );
+    
+    if (completion) {
+      await pc.agents.markRead([completion.id]);
+      console.log(`${stage} stage complete`);
+      break;
+    }
+  }
+}
+
+await coordinateDataPipeline();
+```
+
+### Session Monitoring
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ 
+  apiKey: process.env.PRIVATECONNECT_API_KEY!,
+  agentId: 'monitor'
+});
+
+// Monitor sessions and send alerts
+setInterval(async () => {
+  const active = pc.sessions.getActive();
+  
+  console.log(`Active sessions: ${active.length}`);
+  
+  for (const session of active) {
+    const expiresAt = new Date(session.expiresAt);
+    const now = new Date();
+    const minutesRemaining = (expiresAt.getTime() - now.getTime()) / 60000;
+    
+    // Alert if session is expiring soon
+    if (minutesRemaining < 5) {
+      await pc.agents.broadcast(
+        {
+          type: 'session:expiring',
+          sessionId: session.id,
+          sessionName: session.name,
+          minutesRemaining: Math.floor(minutesRemaining),
+        },
+        { channel: 'alerts' }
+      );
+      
+      console.log(`⚠️  Session "${session.name}" expires in ${Math.floor(minutesRemaining)} minutes`);
+    }
+  }
+}, 60000); // Check every minute
+```
+
+### Listening for Session Events
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ 
+  apiKey: process.env.PRIVATECONNECT_API_KEY!,
+  agentId: 'listener'
+});
+
+// Poll for session events
+setInterval(async () => {
+  const messages = await pc.agents.getMessages({
+    channel: 'orchestration',
+    unreadOnly: true,
+  });
+  
+  for (const msg of messages) {
+    const { type, session, sessionId } = msg.payload;
+    
+    if (type === 'session:created') {
+      console.log(`New session created: ${session.name}`);
+      console.log(`  ID: ${session.id}`);
+      console.log(`  Created by: ${session.createdBy}`);
+      console.log(`  Expires: ${session.expiresAt}`);
+      
+      if (session.metadata) {
+        console.log(`  Metadata:`, session.metadata);
+      }
+    } else if (type === 'session:ended') {
+      console.log(`Session ended: ${sessionId}`);
+      console.log(`  Ended by: ${msg.payload.endedBy}`);
+      console.log(`  Ended at: ${msg.payload.endedAt}`);
+    }
+  }
+  
+  // Mark all as read
+  if (messages.length > 0) {
+    await pc.agents.markRead(messages.map(m => m.id));
+  }
+}, 5000); // Check every 5 seconds
+```
+
+## Best Practices
+
+### Always End Sessions
+
+Use try/finally to ensure sessions are always ended:
+
+```typescript
+const session = await pc.sessions.create('workflow');
+
+try {
+  // Workflow logic
+} finally {
+  await pc.sessions.end(session.id);
+}
+```
+
+### Set Appropriate TTL
+
+Choose TTL based on expected workflow duration:
+
+```typescript
+// Short task (5 minutes)
+await pc.sessions.create('quick-sync', { ttlMinutes: 5 });
+
+// Medium task (30 minutes)
+await pc.sessions.create('deployment', { ttlMinutes: 30 });
+
+// Long task (2 hours)
+await pc.sessions.create('data-migration', { ttlMinutes: 120 });
+```
+
+### Use Metadata for Context
+
+Store relevant workflow information in metadata:
+
+```typescript
+await pc.sessions.create('deployment', {
+  metadata: {
+    environment: 'production',
+    version: '1.2.3',
+    initiatedBy: 'alice',
+    gitCommit: 'abc123',
+    services: ['api', 'worker'],
+  },
+});
+```
+
+### Include Session ID in Messages
+
+Always include the session ID in agent messages:
+
+```typescript
+await pc.agents.sendMessage(agentId, {
+  sessionId: session.id,
+  action: 'deploy',
+  // ... other payload
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agents API" icon="robot" href="/sdk/agents-api">
+    Coordinate agents within sessions
+  </Card>
+  
+  <Card title="Services API" icon="server" href="/sdk/services-api">
+    Access services during workflows
+  </Card>
+</CardGroup>

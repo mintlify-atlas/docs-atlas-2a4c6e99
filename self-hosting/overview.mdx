@@ -1,0 +1,171 @@
+---
+title: Self-Hosting Overview
+description: Deploy and manage your own Private Connect infrastructure
+---
+
+Private Connect can be self-hosted on your own infrastructure, giving you complete control over your data and deployment environment.
+
+## Architecture
+
+A self-hosted Private Connect deployment consists of three core components:
+
+```
+┌─────────────────┐         ┌───────────┐         ┌─────────────────┐
+│   Web UI (3000) │────────▶│  API Hub  │◀────────│     Agents      │
+│     (Nuxt)      │         │  (3001)   │         │   (Machines)    │
+└─────────────────┘         └─────┬─────┘         └─────────────────┘
+                                   │
+                            ┌──────▼──────┐
+                            │  PostgreSQL │
+                            │    (5432)   │
+                            └─────────────┘
+```
+
+### Components
+
+<CardGroup cols={3}>
+  <Card title="Web UI" icon="desktop">
+    Nuxt-based dashboard for managing workspaces, agents, and services
+  </Card>
+  <Card title="API Hub" icon="server">
+    NestJS backend handling authentication, tunneling, and orchestration
+  </Card>
+  <Card title="PostgreSQL" icon="database">
+    Primary database storing users, workspaces, agents, and tunnels
+  </Card>
+</CardGroup>
+
+## System Requirements
+
+### Minimum Requirements
+
+- **OS**: Linux (Ubuntu 20.04+, Debian 11+) or macOS
+- **CPU**: 2 cores
+- **RAM**: 4 GB
+- **Storage**: 20 GB SSD
+- **Node.js**: v18.0.0 or higher
+- **Database**: PostgreSQL 16+
+
+### Production Requirements
+
+- **CPU**: 4+ cores
+- **RAM**: 8+ GB
+- **Storage**: 50+ GB SSD
+- **Network**: Static IP or domain name
+- **SSL**: Valid TLS certificate (recommended)
+
+## Deployment Options
+
+<CardGroup cols={2}>
+  <Card title="Docker Compose" icon="docker" href="/self-hosting/docker">
+    Easiest way to get started with all components containerized
+  </Card>
+  <Card title="From Source" icon="code" href="/self-hosting/source">
+    Build and run components manually for maximum control
+  </Card>
+</CardGroup>
+
+## Port Requirements
+
+Ensure the following ports are available:
+
+| Port Range | Component | Purpose |
+|------------|-----------|----------|
+| `3000` | Web UI | Dashboard access |
+| `3001` | API Hub | Agent connections & API |
+| `5432` | PostgreSQL | Database (internal) |
+| `23000-23100` | API Hub | Tunnel port range |
+
+<Note>
+  The tunnel port range (`23000-23100`) is used for establishing connections between agents. You can configure this range based on your expected concurrent tunnels.
+</Note>
+
+## Environment Variables
+
+### API Hub Configuration
+
+The API hub requires these environment variables:
+
+```bash
+# Database connection
+DATABASE_URL="postgresql://privateconnect:privateconnect@localhost:5432/privateconnect"
+
+# API server port
+PORT=3001
+
+# Production settings
+NODE_ENV=production
+
+# Email authentication (optional)
+RESEND_API_KEY=your_resend_api_key
+EMAIL_FROM="Private Connect <noreply@yourdomain.com>"
+APP_URL="https://yourdomain.com"
+
+# AI/LLM features (optional)
+ASK_LLM_PROVIDER=openai  # or anthropic, ollama
+ASK_LLM_MODEL=gpt-4o-mini
+ASK_LLM_API_KEY=your_api_key
+```
+
+### Web UI Configuration
+
+```bash
+# API endpoint
+NUXT_PUBLIC_API_URL="http://localhost:3001"
+```
+
+### Agent Configuration
+
+Agents connect to your self-hosted hub:
+
+```bash
+# Hub URL
+CONNECT_HUB_URL="http://localhost:3001"
+```
+
+<Warning>
+  Store sensitive environment variables (API keys, database credentials) securely using secrets management tools in production.
+</Warning>
+
+## Database Schema
+
+Private Connect uses Prisma ORM with PostgreSQL. The schema includes:
+
+- **Users & Authentication**: User accounts, magic links, sessions
+- **Workspaces**: Multi-tenant organization structure
+- **Agents**: Connected machines running the agent
+- **Services**: Exposed and reachable services
+- **Tunnels**: Active tunnel connections
+- **Diagnostics**: Service health checks and monitoring
+- **Audit Logs**: Security and usage tracking
+
+## Security Considerations
+
+<Steps>
+  <Step title="Enable HTTPS">
+    Use a reverse proxy (nginx, Caddy) with valid TLS certificates
+  </Step>
+  <Step title="Secure the Database">
+    Use strong passwords and restrict database access to localhost or VPC
+  </Step>
+  <Step title="Configure Firewall">
+    Only expose ports 80/443 publicly; keep other ports internal
+  </Step>
+  <Step title="Set Up Authentication">
+    Configure email authentication with Resend or your email provider
+  </Step>
+  <Step title="Enable Audit Logs">
+    Monitor agent connections and tunnel usage via audit logs
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deploy with Docker" icon="docker" href="/self-hosting/docker">
+    Quick start with Docker Compose
+  </Card>
+  <Card title="Build from Source" icon="hammer" href="/self-hosting/source">
+    Manual setup for advanced configurations
+  </Card>
+</CardGroup>

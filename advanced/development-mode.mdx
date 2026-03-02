@@ -1,0 +1,631 @@
+---
+title: 'Development Mode'
+description: 'Streamline development with project configs, hot reload, and shell integration'
+icon: 'code'
+---
+
+## Overview
+
+Development mode (`connect dev`) provides a streamlined workflow for connecting to multiple services defined in a project configuration file.
+
+## Project Configuration
+
+### Creating a Config File
+
+Initialize a project configuration:
+
+```bash
+connect dev init
+```
+
+This creates `pconnect.yml` in your current directory:
+
+```yaml
+# Private Connect project config
+# Run: connect dev
+
+services:
+  - name: staging-db
+    port: 5432
+  - name: redis
+    port: 6379
+```
+
+### Configuration Format
+
+Private Connect supports multiple formats:
+
+<CodeGroup>
+```yaml pconnect.yml
+services:
+  - name: staging-db
+    port: 5432
+    protocol: tcp
+  
+  - name: staging-api
+    port: 8080
+    protocol: http
+  
+  - name: redis
+    port: 6379
+
+hub: https://hub.privateconnect.io
+```
+
+```json pconnect.json
+{
+  "services": [
+    {
+      "name": "staging-db",
+      "port": 5432,
+      "protocol": "tcp"
+    },
+    {
+      "name": "staging-api",
+      "port": 8080,
+      "protocol": "http"
+    }
+  ],
+  "hub": "https://hub.privateconnect.io"
+}
+```
+
+```yaml .pconnect.yml
+# Dotfile variant
+services:
+  - name: staging-db
+    port: 5432
+```
+</CodeGroup>
+
+### Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Service name (must match exposed service) |
+| `port` | number | No | Local port to bind (auto-selected if omitted) |
+| `localPort` | number | No | Alias for `port` |
+| `protocol` | string | No | Protocol hint: `tcp`, `http`, `https` |
+
+### Hub Configuration
+
+```yaml
+services:
+  - name: my-service
+    port: 3000
+
+# Override default hub
+hub: https://custom-hub.example.com
+```
+
+## Starting Dev Mode
+
+### Basic Usage
+
+<Steps>
+  <Step title="Create Config">
+    ```bash
+    connect dev init
+    ```
+  </Step>
+  
+  <Step title="Edit Services">
+    ```yaml
+    services:
+      - name: staging-db
+        port: 5432
+      - name: staging-redis
+        port: 6379
+    ```
+  </Step>
+  
+  <Step title="Start Dev Mode">
+    ```bash
+    connect dev
+    ```
+    
+    Output:
+    ```bash
+    🚀 Private Connect Dev Mode
+
+      Config: pconnect.yml
+      Hub:    https://hub.privateconnect.io
+
+      Connecting to services...
+
+      [ok] 2 service(s) connected:
+
+        staging-db → localhost:5432
+        staging-redis → localhost:6379
+
+      Set in your .env:
+        STAGING_DB_URL=localhost:5432
+        STAGING_REDIS_URL=localhost:6379
+
+      Press Ctrl+C to disconnect all services
+    ```
+  </Step>
+</Steps>
+
+### Custom Config Path
+
+```bash
+# Use a different config file
+connect dev --file ./configs/production.yml
+
+# Use config from parent directory
+connect dev --file ../team-services.yml
+```
+
+### Config File Discovery
+
+Private Connect searches for config files in this order:
+
+```typescript
+const CONFIG_FILENAMES = [
+  'pconnect.yml',
+  'pconnect.yaml',
+  'pconnect.json',
+  '.pconnect.yml',
+  '.pconnect.yaml',
+  '.pconnect.json',
+];
+```
+
+It also searches up to 3 parent directories:
+
+```bash
+# Current structure:
+# /home/user/projects/myapp/src/
+# /home/user/projects/myapp/pconnect.yml
+
+cd /home/user/projects/myapp/src
+connect dev
+# ✓ Finds ../pconnect.yml automatically
+```
+
+## Hot Reload
+
+### Automatic Service Updates
+
+Dev mode watches for service changes and updates routes automatically:
+
+```typescript
+// From dev.ts - file watching implementation
+const routeWatcher = fs.watch(routesDir, (event, filename) => {
+  if (filename === 'active-routes.json') {
+    if (routeDebounce) clearTimeout(routeDebounce);
+    routeDebounce = setTimeout(async () => {
+      activeRoutes = loadActiveRoutes();
+      routes = buildRouteTable(hubServices, activeRoutes);
+    }, 100);
+  }
+});
+```
+
+### What Triggers Hot Reload
+
+<AccordionGroup>
+  <Accordion title="Service Added">
+    ```bash
+    # Terminal 1: Dev mode running
+    connect dev
+    
+    # Terminal 2: Add new service
+    connect reach new-service 9000
+    
+    # Terminal 1: Automatically picks up new route
+    # ✓ new-service now available at localhost:9000
+    ```
+  </Accordion>
+  
+  <Accordion title="Service Removed">
+    ```bash
+    # Stop a service (Ctrl+C on reach command)
+    # Routes automatically updated
+    # Service no longer available
+    ```
+  </Accordion>
+  
+  <Accordion title="Hub Updates">
+    ```bash
+    # Refreshes every 10 seconds
+    const hubRefreshInterval = setInterval(refreshAll, 10000);
+    
+    # New services exposed by teammates
+    # Automatically available in dev mode
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Manual Reload
+
+Restart dev mode to force a full reload:
+
+```bash
+# Ctrl+C to stop
+# Then restart
+connect dev
+```
+
+## Port Management
+
+### Automatic Port Selection
+
+If the requested port is in use, Private Connect auto-selects an alternative:
+
+```bash
+# Port 5432 already in use by local PostgreSQL
+connect dev
+```
+
+Output:
+
+```bash
+[ok] 3 service(s) connected:
+
+  staging-db → localhost:5433 (was 5432)
+  staging-redis → localhost:6379
+  staging-api → localhost:8080
+```
+
+Implementation:
+
+```typescript
+if (!(await isPortAvailable(localPort))) {
+  const alternativePort = await findAvailablePort(localPort + 1);
+  if (alternativePort) {
+    actualPort = alternativePort;
+    wasAutoSelected = true;
+  } else {
+    throw new Error(`Port ${localPort} is in use and no alternatives available`);
+  }
+}
+```
+
+### Fixed Port Assignment
+
+```yaml
+services:
+  # These ports MUST be available
+  - name: postgres
+    port: 5432
+  
+  - name: mysql  
+    port: 3306
+```
+
+If ports are in use, dev mode will fail with a clear error:
+
+```bash
+[!] 1 service(s) failed:
+
+  postgres: Port 5432 is in use and no alternatives available
+```
+
+### Dynamic Port Configuration
+
+```yaml
+services:
+  # Let Private Connect choose
+  - name: staging-db
+    # port omitted - will use service's targetPort from hub
+  
+  - name: staging-api
+    # port: 0 means "auto-select any available port"
+    port: 0
+```
+
+## Shell Integration
+
+### Environment Variables
+
+Dev mode suggests environment variables:
+
+```bash
+🚀 Private Connect Dev Mode
+
+  [ok] 3 service(s) connected
+
+  Set in your .env:
+    STAGING_DB_URL=localhost:5432
+    STAGING_REDIS_URL=localhost:6379
+    STAGING_API_URL=localhost:8080
+```
+
+Variable naming convention:
+
+```typescript
+// Service name: staging-db
+const envName = serviceName
+  .toUpperCase()           // STAGING-DB
+  .replace(/-/g, '_');     // STAGING_DB
+  
+// Result: STAGING_DB_URL=localhost:5432
+```
+
+### Shell State File
+
+Private Connect maintains state for shell prompt integration:
+
+```json
+// ~/.connect/shell-state.json
+{
+  "services": [
+    { "name": "staging-db", "port": 5432 },
+    { "name": "redis", "port": 6379 }
+  ],
+  "workingDir": "/home/user/projects/myapp",
+  "updatedAt": "2026-03-02T10:30:00Z"
+}
+```
+
+### Shell Prompt Indicator
+
+Add to your shell prompt to show active services:
+
+<CodeGroup>
+```bash .bashrc
+# Add to ~/.bashrc or ~/.zshrc
+function pconnect_prompt() {
+  local state_file="$HOME/.connect/shell-state.json"
+  if [ -f "$state_file" ]; then
+    local count=$(jq -r '.services | length' "$state_file" 2>/dev/null)
+    if [ "$count" -gt 0 ]; then
+      echo "[↔ $count]"
+    fi
+  fi
+}
+
+# Add to PS1
+PS1="$(pconnect_prompt) $PS1"
+```
+
+```zsh .zshrc
+# Zsh version
+function pconnect_prompt() {
+  local state_file="$HOME/.connect/shell-state.json"
+  if [[ -f "$state_file" ]]; then
+    local count=$(jq -r '.services | length' "$state_file" 2>/dev/null)
+    if [[ $count -gt 0 ]]; then
+      echo "[↔ $count]"
+    fi
+  fi
+}
+
+PROMPT='$(pconnect_prompt) '$PROMPT
+```
+</CodeGroup>
+
+Result:
+
+```bash
+[↔ 3] user@host:~/project$ 
+```
+
+## Development Workflows
+
+### Team Synchronization
+
+```yaml
+# Commit to version control
+# pconnect.yml
+services:
+  - name: shared-db
+    port: 5432
+  - name: shared-cache
+    port: 6379
+  - name: staging-api
+    port: 8080
+```
+
+Team members can then:
+
+```bash
+git clone <repo>
+cd <repo>
+connect dev  # Automatically connects to all services
+```
+
+### Multi-Environment Setup
+
+<CodeGroup>
+```yaml pconnect.staging.yml
+services:
+  - name: staging-db
+    port: 5432
+  - name: staging-api
+    port: 8080
+
+hub: https://staging-hub.example.com
+```
+
+```yaml pconnect.production.yml
+services:
+  - name: prod-db
+    port: 5433  # Different port
+  - name: prod-api
+    port: 8081
+
+hub: https://hub.example.com
+```
+</CodeGroup>
+
+Usage:
+
+```bash
+# Development
+connect dev --file pconnect.staging.yml
+
+# Production debugging
+connect dev --file pconnect.production.yml
+```
+
+### Monorepo Support
+
+```bash
+# Root pconnect.yml for shared services
+# packages/api/pconnect.yml for API-specific services
+# packages/frontend/pconnect.yml for frontend-specific services
+
+# In any package:
+cd packages/api
+connect dev  # Uses local pconnect.yml
+
+cd packages/frontend  
+connect dev  # Uses different pconnect.yml
+
+cd ../..  # Root
+connect dev  # Uses root pconnect.yml
+```
+
+## Advanced Configuration
+
+### Service Validation
+
+```typescript
+// Dev mode validates services exist on hub
+const availableService = availableServices.find(
+  s => s.name.toLowerCase() === service.name.toLowerCase()
+);
+
+if (!availableService) {
+  results.push({
+    name: service.name,
+    success: false,
+    error: 'Service not found on hub',
+  });
+  continue;
+}
+
+if (!availableService.tunnelPort) {
+  results.push({
+    name: service.name,
+    success: false,
+    error: 'Service has no active tunnel',
+  });
+}
+```
+
+### Tunnel Creation
+
+```typescript
+// Creates bidirectional TCP tunnel
+const server = net.createServer((clientSocket) => {
+  const proxySocket = net.createConnection({
+    host: hubHost,
+    port: tunnelPort,
+  }, () => {
+    clientSocket.pipe(proxySocket);
+    proxySocket.pipe(clientSocket);
+  });
+
+  proxySocket.on('error', () => clientSocket.destroy());
+  clientSocket.on('error', () => proxySocket.destroy());
+});
+```
+
+### Graceful Cleanup
+
+```typescript
+const cleanup = () => {
+  console.log('\n👋 Disconnecting services...');
+  tunnels.forEach(t => t.server.close());
+  clearShellState();
+  process.exit(0);
+};
+
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Version Control" icon="code-branch">
+    Commit `pconnect.yml` to share team configuration:
+    ```bash
+    git add pconnect.yml
+    git commit -m "Add Private Connect config"
+    ```
+  </Card>
+  
+  <Card title="Environment Variables" icon="file-lines">
+    Use suggested env vars in your `.env`:
+    ```bash
+    DATABASE_URL=postgresql://localhost:5432
+    REDIS_URL=redis://localhost:6379
+    ```
+  </Card>
+  
+  <Card title="Port Conflicts" icon="circle-exclamation">
+    Let auto-selection handle conflicts:
+    ```yaml
+    # Omit port for automatic selection
+    - name: staging-db
+      # port not specified
+    ```
+  </Card>
+  
+  <Card title="Multiple Environments" icon="layer-group">
+    Use separate configs per environment:
+    ```bash
+    pconnect.dev.yml
+    pconnect.staging.yml
+    pconnect.prod.yml
+    ```
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Config Not Found
+
+```bash
+[!] No project config found.
+
+  Create a pconnect.yml file:
+
+    services:
+      - name: staging-db
+        port: 5432
+```
+
+Solution:
+
+```bash
+connect dev init
+```
+
+### Service Not Available
+
+```bash
+[!] 1 service(s) failed:
+
+  staging-db: Service not found on hub
+```
+
+Check if service is exposed:
+
+```bash
+connect whoami
+# View all exposed services
+```
+
+### Port Already in Use
+
+```bash
+[ok] 1 service(s) connected:
+
+  staging-db → localhost:5433 (was 5432)
+```
+
+This is expected behavior. To use the exact port:
+
+```bash
+# Stop conflicting service
+lsof -ti:5432 | xargs kill
+
+# Restart dev mode
+connect dev
+```

@@ -1,0 +1,455 @@
+---
+title: 'Services API'
+description: 'Service discovery and connection management'
+---
+
+The Services API provides methods to discover and connect to services exposed through your Private Connect infrastructure. Get connection strings, ports, and service metadata programmatically.
+
+## Overview
+
+Access the Services API through the `services` property:
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: 'your-api-key' });
+const services = await pc.services.list();
+```
+
+Or use the convenience method:
+
+```typescript
+const db = await pc.connect('postgres-prod');
+console.log(db.connectionString);
+```
+
+## Methods
+
+### list()
+
+List all services in the workspace.
+
+```typescript
+list(): Promise<Service[]>
+```
+
+<ResponseField name="Service[]" type="Service[]">
+  Array of all services
+  
+  <Expandable title="Service properties">
+    <ResponseField name="id" type="string">
+      Unique service identifier
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Service name
+    </ResponseField>
+    
+    <ResponseField name="targetHost" type="string">
+      Target hostname or IP address
+    </ResponseField>
+    
+    <ResponseField name="targetPort" type="number">
+      Target port number
+    </ResponseField>
+    
+    <ResponseField name="tunnelPort" type="number | undefined">
+      Local tunnel port (if active)
+    </ResponseField>
+    
+    <ResponseField name="protocol" type="string">
+      Service protocol (e.g., 'postgres', 'mysql', 'http')
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Service status
+    </ResponseField>
+    
+    <ResponseField name="agentLabel" type="string | undefined">
+      Label of the agent exposing this service
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### Example
+
+```typescript
+const services = await pc.services.list();
+
+services.forEach(service => {
+  console.log(`${service.name}:`);
+  console.log(`  Protocol: ${service.protocol}`);
+  console.log(`  Target: ${service.targetHost}:${service.targetPort}`);
+  console.log(`  Agent: ${service.agentLabel || 'unknown'}`);
+  console.log(`  Status: ${service.status}`);
+});
+```
+
+---
+
+### get()
+
+Get a specific service by name.
+
+```typescript
+get(name: string): Promise<Service | null>
+```
+
+<ParamField path="name" type="string" required>
+  Service name (case-insensitive)
+</ParamField>
+
+<ResponseField name="Service | null" type="Service | null">
+  Service object if found, null otherwise
+</ResponseField>
+
+#### Example
+
+```typescript
+const service = await pc.services.get('postgres-prod');
+
+if (service) {
+  console.log(`Found service: ${service.name}`);
+  console.log(`Protocol: ${service.protocol}`);
+  console.log(`Port: ${service.tunnelPort || service.targetPort}`);
+} else {
+  console.log('Service not found');
+}
+```
+
+---
+
+### getConnection()
+
+Get connection details for a service.
+
+```typescript
+getConnection(serviceName: string): Promise<Connection>
+```
+
+<ParamField path="serviceName" type="string" required>
+  Service name to connect to
+</ParamField>
+
+<ResponseField name="Connection" type="Connection">
+  Connection details for the service
+  
+  <Expandable title="Connection properties">
+    <ResponseField name="service" type="string">
+      Service name
+    </ResponseField>
+    
+    <ResponseField name="host" type="string">
+      Connection host (typically 'localhost')
+    </ResponseField>
+    
+    <ResponseField name="port" type="number">
+      Connection port
+    </ResponseField>
+    
+    <ResponseField name="connectionString" type="string">
+      Protocol-specific connection string
+    </ResponseField>
+    
+    <ResponseField name="envVar" type="string">
+      Suggested environment variable name
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### Connection String Formats
+
+The SDK automatically generates connection strings based on the service protocol:
+
+- **PostgreSQL** (port 5432): `postgres://localhost:5432/postgres`
+- **MySQL** (port 3306): `mysql://localhost:3306`
+- **Redis** (port 6379): `redis://localhost:6379`
+- **MongoDB** (port 27017): `mongodb://localhost:27017`
+- **HTTP/HTTPS**: `http://localhost:PORT`
+- **Other**: `tcp://localhost:PORT`
+
+#### Example
+
+<Tabs>
+  <Tab title="PostgreSQL">
+    ```typescript
+    const db = await pc.services.getConnection('postgres-prod');
+    
+    console.log(db.connectionString);
+    // postgres://localhost:5432/postgres
+    
+    console.log(db.envVar);
+    // DATABASE_URL
+    
+    // Use with pg client
+    import { Client } from 'pg';
+    const client = new Client({ connectionString: db.connectionString });
+    await client.connect();
+    ```
+  </Tab>
+  
+  <Tab title="MySQL">
+    ```typescript
+    const db = await pc.services.getConnection('mysql-prod');
+    
+    console.log(db.connectionString);
+    // mysql://localhost:3306
+    
+    // Use with mysql2
+    import mysql from 'mysql2/promise';
+    const connection = await mysql.createConnection(db.connectionString);
+    ```
+  </Tab>
+  
+  <Tab title="Redis">
+    ```typescript
+    const cache = await pc.services.getConnection('redis-prod');
+    
+    console.log(cache.connectionString);
+    // redis://localhost:6379
+    
+    // Use with ioredis
+    import Redis from 'ioredis';
+    const redis = new Redis(cache.connectionString);
+    ```
+  </Tab>
+  
+  <Tab title="HTTP API">
+    ```typescript
+    const api = await pc.services.getConnection('internal-api');
+    
+    console.log(api.connectionString);
+    // http://localhost:8080
+    
+    // Use with fetch
+    const response = await fetch(`${api.connectionString}/health`);
+    const data = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Convenience Methods
+
+### connect()
+
+The main `PrivateConnect` class provides a convenience method for quick connections:
+
+```typescript
+connect(serviceName: string): Promise<Connection>
+```
+
+This is equivalent to `pc.services.getConnection(serviceName)`.
+
+#### Example
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: 'your-api-key' });
+
+// Quick connection
+const db = await pc.connect('postgres-prod');
+console.log(db.connectionString);
+```
+
+### Standalone connect()
+
+For even simpler usage, import the standalone function:
+
+```typescript
+import { connect } from '@privateconnect/sdk';
+
+// Uses PRIVATECONNECT_API_KEY from environment
+const db = await connect('postgres-prod');
+
+// Or provide config
+const cache = await connect('redis-prod', { 
+  apiKey: 'your-api-key' 
+});
+```
+
+## Complete Examples
+
+### Database Connection
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+import { Client } from 'pg';
+
+const pc = new PrivateConnect({ 
+  apiKey: process.env.PRIVATECONNECT_API_KEY! 
+});
+
+// Get connection details
+const db = await pc.connect('postgres-prod');
+
+// Connect to database
+const client = new Client({ 
+  connectionString: db.connectionString 
+});
+
+await client.connect();
+
+// Run query
+const result = await client.query('SELECT NOW()');
+console.log('Database time:', result.rows[0].now);
+
+await client.end();
+```
+
+### Multi-Service Application
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+import { Client as PgClient } from 'pg';
+import Redis from 'ioredis';
+
+const pc = new PrivateConnect({ 
+  apiKey: process.env.PRIVATECONNECT_API_KEY! 
+});
+
+// Connect to multiple services
+const [database, cache] = await Promise.all([
+  pc.connect('postgres-prod'),
+  pc.connect('redis-prod'),
+]);
+
+// Initialize clients
+const pg = new PgClient({ connectionString: database.connectionString });
+const redis = new Redis(cache.connectionString);
+
+await Promise.all([
+  pg.connect(),
+  redis.ping(),
+]);
+
+console.log('Connected to database and cache');
+
+// Use in application
+const userId = '12345';
+
+// Check cache
+let user = await redis.get(`user:${userId}`);
+
+if (!user) {
+  // Query database
+  const result = await pg.query(
+    'SELECT * FROM users WHERE id = $1',
+    [userId]
+  );
+  
+  user = result.rows[0];
+  
+  // Store in cache
+  await redis.setex(`user:${userId}`, 3600, JSON.stringify(user));
+}
+
+console.log('User:', user);
+
+// Cleanup
+await pg.end();
+await redis.quit();
+```
+
+### Dynamic Service Discovery
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ 
+  apiKey: process.env.PRIVATECONNECT_API_KEY! 
+});
+
+// List all available services
+const services = await pc.services.list();
+
+console.log('Available services:');
+services.forEach(service => {
+  console.log(`  ${service.name} (${service.protocol})`);
+});
+
+// Find databases
+const databases = services.filter(s => 
+  ['postgres', 'mysql', 'mongodb'].includes(s.protocol)
+);
+
+console.log(`\nFound ${databases.length} databases:`);
+
+for (const db of databases) {
+  const connection = await pc.services.getConnection(db.name);
+  console.log(`  ${db.name}: ${connection.connectionString}`);
+}
+```
+
+### Error Handling
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ 
+  apiKey: process.env.PRIVATECONNECT_API_KEY! 
+});
+
+try {
+  const db = await pc.connect('nonexistent-service');
+  console.log(db.connectionString);
+} catch (error) {
+  if (error instanceof Error) {
+    console.error('Connection failed:', error.message);
+    // Service "nonexistent-service" not found
+  }
+}
+
+// Check before connecting
+const service = await pc.services.get('maybe-exists');
+
+if (service) {
+  const connection = await pc.services.getConnection(service.name);
+  console.log('Connected:', connection.connectionString);
+} else {
+  console.log('Service not available');
+}
+```
+
+## Environment Variables
+
+The SDK suggests environment variable names based on the service protocol:
+
+```typescript
+const db = await pc.connect('postgres-prod');
+console.log(db.envVar); // DATABASE_URL
+
+const cache = await pc.connect('redis-prod');
+console.log(cache.envVar); // REDIS_URL
+
+const api = await pc.connect('internal-api');
+console.log(api.envVar); // API_URL
+
+const custom = await pc.connect('my-service');
+console.log(custom.envVar); // MY_SERVICE_URL
+```
+
+Use these in your application:
+
+```typescript
+// Set environment variables
+const db = await pc.connect('postgres-prod');
+process.env[db.envVar] = db.connectionString;
+
+// Now your app can use DATABASE_URL
+console.log(process.env.DATABASE_URL);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agents API" icon="robot" href="/sdk/agents-api">
+    Coordinate service access across agents
+  </Card>
+  
+  <Card title="Sessions API" icon="clock" href="/sdk/sessions-api">
+    Create orchestration sessions
+  </Card>
+</CardGroup>

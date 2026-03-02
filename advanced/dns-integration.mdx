@@ -1,0 +1,544 @@
+---
+title: 'DNS Integration'
+description: 'Use .connect domains for seamless local service access'
+icon: 'globe'
+---
+
+## Overview
+
+Private Connect's DNS integration enables you to access services using friendly `.connect` domains instead of `localhost:port` URLs.
+
+## Quick Start
+
+### Installation
+
+```bash
+connect dns install
+```
+
+This configures your system to resolve `*.connect` domains to `127.0.0.1`:
+
+```bash
+🌐 Installing Private Connect DNS...
+
+  Setting up macOS resolver...
+
+  Created: /etc/resolver/connect
+  [ok] DNS server started (PID: 12345)
+
+[ok] DNS installed successfully!
+
+  You can now access services via:
+    curl http://my-service.connect
+    psql -h prod-db.connect
+
+  Commands:
+    Status:    connect dns status
+    Test:      connect dns test prod-db
+    Uninstall: connect dns uninstall
+```
+
+### Usage
+
+Once installed, access services by name:
+
+```bash
+# Database connection
+psql -h staging-db.connect -U postgres
+
+# HTTP requests
+curl http://api.connect/health
+
+# Application config
+DATABASE_URL=postgresql://staging-db.connect/mydb
+REDIS_URL=redis://redis.connect:6379
+```
+
+## Platform Support
+
+### macOS
+
+<Steps>
+  <Step title="Resolver Configuration">
+    Creates `/etc/resolver/connect`:
+    
+    ```bash
+    # Private Connect DNS resolver
+    # Resolves *.connect to local DNS server
+    nameserver 127.0.0.1
+    port 15353
+    ```
+  </Step>
+  
+  <Step title="DNS Server">
+    Starts background DNS server on port 15353:
+    
+    ```bash
+    [ok] DNS server started (PID: 12345)
+    ```
+  </Step>
+  
+  <Step title="Automatic Startup">
+    DNS server starts automatically with daemon:
+    
+    ```bash
+    connect daemon install
+    ```
+  </Step>
+</Steps>
+
+### Linux (systemd-resolved)
+
+<Steps>
+  <Step title="systemd-resolved Detection">
+    ```bash
+    # Automatically detects systemd-resolved
+    systemctl is-active systemd-resolved
+    ```
+  </Step>
+  
+  <Step title="Drop-in Configuration">
+    Creates `/etc/systemd/resolved.conf.d/pconnect.conf`:
+    
+    ```ini
+    # Private Connect DNS configuration
+    [Resolve]
+    DNS=127.0.0.1:15353
+    Domains=~connect
+    ```
+  </Step>
+  
+  <Step title="Service Restart">
+    ```bash
+    sudo systemctl restart systemd-resolved
+    ```
+  </Step>
+</Steps>
+
+### Linux (dnsmasq)
+
+For systems without systemd-resolved:
+
+```bash
+# Install dnsmasq
+sudo apt install dnsmasq
+
+# Configure
+echo "address=/.connect/127.0.0.1" | sudo tee /etc/dnsmasq.d/pconnect.conf
+
+# Restart
+sudo systemctl restart dnsmasq
+```
+
+### Linux (manual /etc/hosts)
+
+Fallback option:
+
+```bash
+# Add entries manually
+sudo tee -a /etc/hosts << EOF
+127.0.0.1 staging-db.connect
+127.0.0.1 redis.connect
+127.0.0.1 api.connect
+EOF
+```
+
+## DNS Server
+
+### How It Works
+
+<AccordionGroup>
+  <Accordion title="Query Processing">
+    ```typescript
+    server.on('message', async (msg, rinfo) => {
+      const queryName = parseDnsQueryName(msg);
+      
+      if (!queryName || !queryName.endsWith('.connect')) {
+        sendDnsResponse(server, rinfo, msg, null);
+        return;
+      }
+      
+      // Extract service name: "staging-db.connect" → "staging-db"
+      const serviceName = queryName.slice(0, -('.connect'.length + 1));
+      
+      // Always resolve to 127.0.0.1
+      const ip = '127.0.0.1';
+      sendDnsResponse(server, rinfo, msg, ip);
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Service Resolution">
+    All `.connect` domains resolve to `127.0.0.1`:
+    
+    ```bash
+    dig staging-db.connect
+    
+    # ;; ANSWER SECTION:
+    # staging-db.connect.  60  IN  A  127.0.0.1
+    ```
+    
+    The proxy/reach handles routing to the actual service.
+  </Accordion>
+  
+  <Accordion title="DNS Protocol">
+    Implements minimal DNS server:
+    
+    - Listens on UDP port 15353 (non-privileged)
+    - Responds with A records (IPv4)
+    - TTL: 60 seconds
+    - NXDOMAIN for non-`.connect` queries
+  </Accordion>
+</AccordionGroup>
+
+### Server Management
+
+```bash
+# Start DNS server
+connect dns start
+
+# Stop DNS server
+connect dns stop
+
+# Check status
+connect dns status
+
+# View logs
+tail -f ~/.connect/dns.log
+```
+
+### Background Process
+
+DNS server runs as a detached process:
+
+```typescript
+const child = spawn(process.execPath, [
+  process.argv[1],
+  'dns',
+  'serve',
+  '--port', dnsPort.toString(),
+  '--domain', domain,
+  '--hub', hubUrl,
+], {
+  detached: true,
+  stdio: ['ignore', logStream, logStream],
+  env: { ...process.env, CONNECT_DNS_SERVER: '1' },
+});
+
+child.unref();
+fs.writeFileSync(pidPath, child.pid?.toString() || '');
+```
+
+## Custom Domains
+
+### Using a Different TLD
+
+```bash
+# Install with custom domain
+connect dns install --domain local
+
+# Now use .local domains
+curl http://api.local
+psql -h db.local
+```
+
+### Multiple Domain Support
+
+Install separate resolvers:
+
+```bash
+# Development
+connect dns install --domain dev
+
+# Staging
+connect dns install --domain staging
+
+# Production
+connect dns install --domain prod
+```
+
+Access:
+
+```bash
+curl http://api.dev
+curl http://api.staging  
+curl http://api.prod
+```
+
+## Testing
+
+### DNS Resolution Test
+
+```bash
+connect dns test staging-db
+```
+
+Output:
+
+```bash
+🔍 Testing DNS resolution for staging-db.connect...
+
+  [ok] Resolved: staging-db.connect -> 127.0.0.1
+```
+
+### Manual Testing
+
+<CodeGroup>
+```bash dig
+dig staging-db.connect
+
+# ;; ANSWER SECTION:
+# staging-db.connect.  60  IN  A  127.0.0.1
+```
+
+```bash nslookup
+nslookup staging-db.connect
+
+# Server:  127.0.0.1
+# Address: 127.0.0.1#15353
+# 
+# Name:    staging-db.connect
+# Address: 127.0.0.1
+```
+
+```bash host
+host staging-db.connect
+
+# staging-db.connect has address 127.0.0.1
+```
+</CodeGroup>
+
+### Application Testing
+
+```bash
+# PostgreSQL
+psql -h staging-db.connect -U postgres -c "SELECT version();"
+
+# Redis
+redis-cli -h redis.connect PING
+
+# HTTP
+curl -v http://api.connect/health
+
+# MySQL
+mysql -h mysql.connect -u root -p
+```
+
+## Integration with Proxy
+
+### Combined Setup
+
+DNS + Proxy for seamless subdomain routing:
+
+```bash
+# 1. Install DNS
+connect dns install
+
+# 2. Start proxy
+connect proxy start
+
+# 3. Reach services
+connect reach staging-db 5432
+connect reach redis 6379
+
+# 4. Access via .connect domains through proxy
+psql -h staging-db.connect -p 9999
+redis-cli -h redis.connect -p 9999
+```
+
+### HTTP(S) Access
+
+With HTTPS proxy:
+
+```bash
+connect proxy start --https
+```
+
+Access:
+
+```bash
+curl https://api.connect:9999/health
+curl https://frontend.connect:9999/
+```
+
+## Caching
+
+### Service Cache
+
+DNS server caches service metadata:
+
+```typescript
+let serviceCache: Map<string, number> = new Map();
+let lastFetch = 0;
+const CACHE_TTL = 5000; // 5 seconds
+
+async function refreshServiceCache() {
+  const now = Date.now();
+  if (now - lastFetch < CACHE_TTL) return;
+  
+  const response = await fetch(`${hubUrl}/v1/services`, {
+    headers: { 'x-api-key': apiKey },
+  });
+  
+  if (response.ok) {
+    const services = await response.json();
+    serviceCache.clear();
+    for (const service of services) {
+      if (service.tunnelPort) {
+        serviceCache.set(service.name.toLowerCase(), service.tunnelPort);
+      }
+    }
+    lastFetch = now;
+  }
+}
+```
+
+### DNS Cache Flushing
+
+<CodeGroup>
+```bash macOS
+# Flush DNS cache
+sudo dscacheutil -flushcache
+sudo killall -HUP mDNSResponder
+```
+
+```bash Linux (systemd-resolved)
+# Flush systemd-resolved cache
+sudo systemd-resolve --flush-caches
+```
+
+```bash Linux (dnsmasq)
+# Restart dnsmasq
+sudo systemctl restart dnsmasq
+```
+</CodeGroup>
+
+## Uninstallation
+
+```bash
+connect dns uninstall
+```
+
+This:
+1. Stops the DNS server
+2. Removes resolver configuration
+3. Cleans up background processes
+
+```bash
+🌐 Uninstalling Private Connect DNS...
+
+  [ok] DNS server stopped
+  Removed: /etc/resolver/connect
+
+[ok] DNS uninstalled
+```
+
+## Troubleshooting
+
+### DNS Not Resolving
+
+<Steps>
+  <Step title="Check DNS Server">
+    ```bash
+    connect dns status
+    ```
+    
+    Should show:
+    ```bash
+    ● DNS Server: running (PID: 12345)
+    ```
+  </Step>
+  
+  <Step title="Verify Resolver Config">
+    ```bash
+    # macOS
+    cat /etc/resolver/connect
+    
+    # Linux
+    cat /etc/systemd/resolved.conf.d/pconnect.conf
+    ```
+  </Step>
+  
+  <Step title="Test Resolution">
+    ```bash
+    connect dns test my-service
+    ```
+  </Step>
+  
+  <Step title="Flush DNS Cache">
+    ```bash
+    # macOS
+    sudo dscacheutil -flushcache
+    sudo killall -HUP mDNSResponder
+    
+    # Linux
+    sudo systemd-resolve --flush-caches
+    ```
+  </Step>
+</Steps>
+
+### Service Not Found
+
+```bash
+# Check if service is exposed/reached
+connect whoami
+
+# Check active routes
+cat ~/.connect/active-routes.json
+
+# Verify service in hub
+curl -H "x-api-key: $API_KEY" https://hub.privateconnect.io/v1/services
+```
+
+### Permission Issues
+
+```bash
+# macOS - creating /etc/resolver requires sudo
+[x] Failed to create resolver directory.
+  Run: sudo mkdir -p /etc/resolver
+```
+
+Solution:
+
+```bash
+sudo connect dns install
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Descriptive Names" icon="tag">
+    ```bash
+    # Good
+    staging-db.connect
+    prod-api.connect
+    
+    # Avoid
+    db.connect
+    api.connect
+    ```
+  </Card>
+  
+  <Card title="Daemon Mode" icon="server">
+    Install daemon for automatic startup:
+    ```bash
+    connect daemon install
+    ```
+    DNS server starts with daemon.
+  </Card>
+  
+  <Card title="Environment Variables" icon="code">
+    Use `.connect` in configs:
+    ```bash
+    DATABASE_URL=postgresql://staging-db.connect
+    REDIS_URL=redis://cache.connect
+    ```
+  </Card>
+  
+  <Card title="Testing" icon="flask">
+    Always test DNS after installation:
+    ```bash
+    connect dns test my-service
+    ```
+  </Card>
+</CardGroup>

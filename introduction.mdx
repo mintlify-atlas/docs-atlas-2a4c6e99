@@ -1,0 +1,236 @@
+---
+title: Introduction to Private Connect
+description: Reach your database and private services from anywhere. No VPN, no open ports, no changing localhost to 0.0.0.0.
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.svg"
+  alt="Private Connect Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.svg"
+  alt="Private Connect Hero Dark"
+/>
+
+## What is Private Connect?
+
+Your database binds to localhost. You need it from your laptop, a cloud IDE, or another machine. One command on each side connects them.
+
+```bash
+# On the machine with the DB
+connect expose localhost:5432 --name my-db
+
+# From anywhere else
+connect reach my-db
+# → localhost:5432 now points at my-db. Same connection string, works everywhere.
+```
+
+No port forwarding, no firewall rules. Works with Tailscale.
+
+## Why Private Connect?
+
+<CardGroup cols={2}>
+  <Card
+    title="Access by Name"
+    icon="tag"
+  >
+    Use `connect prod-db` instead of remembering IPs or ports. Services are identified by meaningful names across your entire workspace.
+  </Card>
+  <Card
+    title="Stable Ports"
+    icon="link"
+  >
+    The same service always gets the same local port across restarts. Your connection strings never change.
+  </Card>
+  <Card
+    title="End-to-End Encrypted"
+    icon="lock"
+  >
+    All traffic is encrypted with TLS. Services are private to your workspace with built-in audit logging.
+  </Card>
+  <Card
+    title="Works Everywhere"
+    icon="globe"
+  >
+    On top of Tailscale, VPN, or plain internet. Access services from your laptop, cloud IDEs, CI/CD, or mobile devices.
+  </Card>
+</CardGroup>
+
+## How It Works
+
+```
+┌─────────────────┐         ┌───────┐         ┌─────────────────┐
+│   Your Server   │────────▶│  Hub  │◀────────│   Your Laptop   │
+│                 │         └───────┘         │                 │
+│ connect :5432   │                           │ connect prod-db │
+└─────────────────┘                           └─────────────────┘
+```
+
+An agent runs on each machine. Expose services from one, reach them from another. All traffic is encrypted. Services are private to your workspace.
+
+## Real Use Cases
+
+### Database Access for AI Coding Assistants
+
+Let Cursor's AI query your local database without exposing ports:
+
+```bash
+# On your laptop with the database
+connect expose localhost:5432 --name my-db
+
+# From Cursor (via MCP integration)
+# AI can now: "What tables are in my-db?" or "Get connection string for my-db"
+```
+
+Your app keeps using `localhost:5432`. The AI uses the same endpoint via Private Connect. [Learn more](/database-cursor)
+
+### Onboard Teammates Instantly
+
+**The old way:** "Join the VPN, add these entries to /etc/hosts, forward ports 5432, 6379, and 8080..."
+
+**With Private Connect:**
+
+```bash
+# New teammate's first day
+connect clone sarah
+# → ✓ Cloned 4 service(s) from sarah
+# → Ready to code.
+```
+
+**Time saved:** 2 hours → 30 seconds
+
+### CI/CD to Private Infrastructure
+
+GitHub Actions deploying to servers that aren't publicly accessible:
+
+```yaml
+# .github/workflows/deploy.yml
+steps:
+  - name: Connect to private infra
+    run: |
+      curl -fsSL https://privateconnect.co/install.sh | bash
+      connect up --api-key ${{ secrets.PRIVATECONNECT_KEY }}
+      connect reach deploy-server
+      
+  - name: Deploy
+    run: |
+      rsync -avz ./dist/ localhost:/var/www/app/
+```
+
+No bastion hosts. No VPN configurations. No firewall rules.
+
+### Test Webhooks from Stripe, GitHub, etc.
+
+Local development needs to receive webhooks from external services:
+
+```bash
+connect expose localhost:3000 --name webhook-test --public
+# → https://abc123.privateconnect.co
+
+# Use that URL in Stripe/GitHub webhook settings
+# Webhooks hit your local machine
+```
+
+### Access Your Home Lab from Anywhere
+
+Raspberry Pi, NAS, or self-hosted services — reach them without exposing ports:
+
+```bash
+# On your home server (runs 24/7)
+connect daemon install
+connect expose localhost:8096 --name jellyfin
+connect expose 192.168.1.50:445 --name nas
+
+# From anywhere in the world
+connect reach jellyfin
+# → http://localhost:8096 — your media server
+```
+
+No dynamic DNS. No port forwarding. No security exposure.
+
+## Share with Teammates
+
+```bash
+# Share your environment
+connect share
+# → Share code: x7k9m2
+
+# Teammate joins with one command
+connect join x7k9m2
+# → Same services, same ports. Done.
+```
+
+## Try Without Signup
+
+Quick tunnel for demos and testing:
+
+```bash
+npx private-connect tunnel 3000
+# → Creates temporary public tunnel (2hr expiry)
+```
+
+Share your entire local environment with a teammate:
+
+```bash
+npx private-connect up 3000 5432 6379
+# → npx private-connect join k7m2p9    (send this to your teammate)
+```
+
+## Private Connect vs. Alternatives
+
+| Scenario | VPN | SSH Tunnels | Private Connect |
+|----------|-----|-------------|------------------|
+| Onboard new dev | 2+ hours | 30+ min | 30 seconds |
+| Share environment | Not possible | Complex | One command |
+| Works from anywhere | Sometimes | Fragile | Always |
+| Revoke access | IT ticket | Find & delete keys | Instant |
+| Audit who accessed | Limited | None | Built-in |
+| Setup on new machine | Reinstall client | Copy keys | Run `connect up` |
+| Public link (no account) | Not possible | Not possible | `connect link` |
+
+## Get Started
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get from install to first working tunnel in under 2 minutes
+  </Card>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Detailed installation instructions for all platforms
+  </Card>
+  <Card
+    title="CLI Reference"
+    icon="terminal"
+    href="/cli-reference"
+  >
+    Complete command reference and options
+  </Card>
+  <Card
+    title="Use Cases"
+    icon="lightbulb"
+    href="/use-cases"
+  >
+    Real scenarios where Private Connect saves hours of setup
+  </Card>
+</CardGroup>
+
+## Community
+
+Join our Discord community to get help, share use cases, and connect with other users:
+
+<Card
+  title="Join our Discord"
+  icon="discord"
+  href="https://discord.gg/KqdBcqRk5E"
+>
+  Get support, share tips, and stay updated on new features
+</Card>

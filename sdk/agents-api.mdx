@@ -1,0 +1,535 @@
+---
+title: 'Agents API'
+description: 'Agent discovery, messaging, and orchestration'
+---
+
+The Agents API enables discovery and communication with agents in your Private Connect workspace. Use it to build distributed systems, coordinate workflows, and orchestrate multi-agent operations.
+
+## Overview
+
+Access the Agents API through the `agents` property:
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ apiKey: 'your-api-key' });
+const agents = await pc.agents.list();
+```
+
+## Methods
+
+### list()
+
+List all agents in the workspace.
+
+```typescript
+list(options?: { onlineOnly?: boolean }): Promise<Agent[]>
+```
+
+<ParamField path="options" type="object">
+  Optional filtering options
+  
+  <Expandable title="properties">
+    <ParamField path="onlineOnly" type="boolean">
+      Only return agents that are currently online
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="Agent[]" type="Agent[]">
+  Array of agents in the workspace
+  
+  <Expandable title="Agent properties">
+    <ResponseField name="id" type="string">
+      Unique agent identifier
+    </ResponseField>
+    
+    <ResponseField name="name" type="string | undefined">
+      Human-readable agent name
+    </ResponseField>
+    
+    <ResponseField name="label" type="string">
+      Agent label for display
+    </ResponseField>
+    
+    <ResponseField name="isOnline" type="boolean">
+      Whether the agent is currently online
+    </ResponseField>
+    
+    <ResponseField name="lastSeenAt" type="string">
+      ISO timestamp of last activity
+    </ResponseField>
+    
+    <ResponseField name="capabilities" type="string[]">
+      Array of registered capability names
+    </ResponseField>
+    
+    <ResponseField name="services" type="string[]">
+      Array of service names exposed by this agent
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### Example
+
+<Tabs>
+  <Tab title="All Agents">
+    ```typescript
+    const agents = await pc.agents.list();
+    
+    agents.forEach(agent => {
+      console.log(`${agent.label} (${agent.isOnline ? 'online' : 'offline'})`);
+      console.log(`  Capabilities: ${agent.capabilities.join(', ')}`);
+      console.log(`  Services: ${agent.services.join(', ')}`);
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Online Only">
+    ```typescript
+    const onlineAgents = await pc.agents.list({ onlineOnly: true });
+    
+    console.log(`${onlineAgents.length} agents online`);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### findByCapability()
+
+Find agents that have a specific capability.
+
+```typescript
+findByCapability(capability: string): Promise<Agent[]>
+```
+
+<ParamField path="capability" type="string" required>
+  The capability name to search for
+</ParamField>
+
+<ResponseField name="Agent[]" type="Agent[]">
+  Array of agents with the specified capability
+</ResponseField>
+
+#### Example
+
+```typescript
+// Find all agents that can deploy
+const deployers = await pc.agents.findByCapability('deploy');
+
+if (deployers.length > 0) {
+  console.log(`Found ${deployers.length} agents with deploy capability`);
+  deployers.forEach(agent => {
+    console.log(`  - ${agent.label}`);
+  });
+}
+```
+
+---
+
+### registerCapabilities()
+
+Register capabilities for this agent.
+
+```typescript
+registerCapabilities(
+  capabilities: Array<{ name: string; metadata?: Record<string, unknown> }>
+): Promise<void>
+```
+
+<ParamField path="capabilities" type="array" required>
+  Array of capabilities to register
+  
+  <Expandable title="Capability object">
+    <ParamField path="name" type="string" required>
+      Capability name (e.g., 'deploy', 'monitor', 'backup')
+    </ParamField>
+    
+    <ParamField path="metadata" type="object">
+      Optional metadata describing the capability
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+#### Example
+
+```typescript
+await pc.agents.registerCapabilities([
+  { 
+    name: 'deploy',
+    metadata: { 
+      environments: ['staging', 'production'],
+      maxConcurrent: 3
+    }
+  },
+  { 
+    name: 'monitor',
+    metadata: { 
+      interval: 60,
+      metrics: ['cpu', 'memory', 'disk']
+    }
+  },
+]);
+
+console.log('Capabilities registered');
+```
+
+---
+
+### sendMessage()
+
+Send a message to another agent.
+
+```typescript
+sendMessage(
+  toAgentId: string,
+  payload: Record<string, unknown>,
+  options?: { 
+    channel?: string; 
+    type?: 'request' | 'response' | 'event' 
+  }
+): Promise<{ messageId: string }>
+```
+
+<ParamField path="toAgentId" type="string" required>
+  Target agent ID
+</ParamField>
+
+<ParamField path="payload" type="object" required>
+  Message payload (any JSON-serializable object)
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional message options
+  
+  <Expandable title="properties">
+    <ParamField path="channel" type="string">
+      Channel name for organizing messages (e.g., 'deployments', 'alerts')
+    </ParamField>
+    
+    <ParamField path="type" type="'request' | 'response' | 'event'">
+      Message type for workflow coordination
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="messageId" type="string">
+  Unique identifier for the sent message
+</ResponseField>
+
+#### Example
+
+<Tabs>
+  <Tab title="Simple Message">
+    ```typescript
+    const { messageId } = await pc.agents.sendMessage(
+      'agent-xyz',
+      { action: 'deploy', version: '1.2.3' }
+    );
+    
+    console.log(`Message sent: ${messageId}`);
+    ```
+  </Tab>
+  
+  <Tab title="With Channel">
+    ```typescript
+    await pc.agents.sendMessage(
+      'monitoring-agent',
+      { 
+        event: 'threshold_exceeded',
+        metric: 'cpu',
+        value: 95
+      },
+      { 
+        channel: 'alerts',
+        type: 'event'
+      }
+    );
+    ```
+  </Tab>
+  
+  <Tab title="Request/Response">
+    ```typescript
+    // Send request
+    const { messageId } = await pc.agents.sendMessage(
+      'database-agent',
+      { query: 'get_stats' },
+      { type: 'request' }
+    );
+    
+    // Later, respond
+    await pc.agents.sendMessage(
+      'original-agent-id',
+      { stats: { connections: 42, queries: 1337 } },
+      { type: 'response' }
+    );
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### broadcast()
+
+Broadcast a message to all online agents.
+
+```typescript
+broadcast(
+  payload: Record<string, unknown>,
+  options?: { channel?: string }
+): Promise<{ sent: number }>
+```
+
+<ParamField path="payload" type="object" required>
+  Message payload to broadcast
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional broadcast options
+  
+  <Expandable title="properties">
+    <ParamField path="channel" type="string">
+      Channel name for organizing messages
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="sent" type="number">
+  Number of agents that received the message
+</ResponseField>
+
+#### Example
+
+```typescript
+// Notify all agents of maintenance window
+const { sent } = await pc.agents.broadcast(
+  {
+    type: 'maintenance',
+    startsAt: '2024-03-15T02:00:00Z',
+    duration: 60,
+    message: 'Database upgrade in progress'
+  },
+  { channel: 'system' }
+);
+
+console.log(`Notified ${sent} agents`);
+```
+
+---
+
+### getMessages()
+
+Retrieve messages for this agent.
+
+```typescript
+getMessages(options?: {
+  channel?: string;
+  unreadOnly?: boolean;
+  limit?: number;
+}): Promise<Message[]>
+```
+
+<ParamField path="options" type="object">
+  Optional filtering options
+  
+  <Expandable title="properties">
+    <ParamField path="channel" type="string">
+      Filter by channel name
+    </ParamField>
+    
+    <ParamField path="unreadOnly" type="boolean">
+      Only return unread messages
+    </ParamField>
+    
+    <ParamField path="limit" type="number">
+      Maximum number of messages to return
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="Message[]" type="Message[]">
+  Array of messages
+  
+  <Expandable title="Message properties">
+    <ResponseField name="id" type="string">
+      Unique message identifier
+    </ResponseField>
+    
+    <ResponseField name="from" type="object">
+      Sender information
+      
+      <Expandable title="properties">
+        <ResponseField name="id" type="string">
+          Sender agent ID
+        </ResponseField>
+        
+        <ResponseField name="name" type="string | undefined">
+          Sender agent name
+        </ResponseField>
+        
+        <ResponseField name="label" type="string | undefined">
+          Sender agent label
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="channel" type="string">
+      Channel name
+    </ResponseField>
+    
+    <ResponseField name="type" type="string">
+      Message type
+    </ResponseField>
+    
+    <ResponseField name="payload" type="object">
+      Message payload
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO timestamp when message was created
+    </ResponseField>
+    
+    <ResponseField name="isRead" type="boolean">
+      Whether the message has been read
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### Example
+
+<Tabs>
+  <Tab title="Unread Messages">
+    ```typescript
+    const unread = await pc.agents.getMessages({ unreadOnly: true });
+    
+    console.log(`You have ${unread.length} unread messages`);
+    
+    unread.forEach(msg => {
+      console.log(`From: ${msg.from.label}`);
+      console.log(`Channel: ${msg.channel}`);
+      console.log(`Payload:`, msg.payload);
+    });
+    ```
+  </Tab>
+  
+  <Tab title="By Channel">
+    ```typescript
+    const alerts = await pc.agents.getMessages({
+      channel: 'alerts',
+      limit: 10
+    });
+    
+    alerts.forEach(alert => {
+      console.log(`[${alert.createdAt}] ${alert.payload.message}`);
+    });
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### markRead()
+
+Mark messages as read.
+
+```typescript
+markRead(messageIds: string[]): Promise<void>
+```
+
+<ParamField path="messageIds" type="string[]" required>
+  Array of message IDs to mark as read
+</ParamField>
+
+#### Example
+
+```typescript
+// Get unread messages
+const messages = await pc.agents.getMessages({ unreadOnly: true });
+
+// Process them
+messages.forEach(msg => {
+  console.log(`Processing: ${msg.payload.action}`);
+  // ... handle message ...
+});
+
+// Mark all as read
+const messageIds = messages.map(m => m.id);
+await pc.agents.markRead(messageIds);
+
+console.log(`Marked ${messageIds.length} messages as read`);
+```
+
+## Complete Example
+
+Here's a complete example showing agent orchestration:
+
+```typescript
+import { PrivateConnect } from '@privateconnect/sdk';
+
+const pc = new PrivateConnect({ 
+  apiKey: process.env.PRIVATECONNECT_API_KEY!,
+  agentId: 'orchestrator'
+});
+
+// Register capabilities
+await pc.agents.registerCapabilities([
+  { name: 'orchestrate', metadata: { version: '1.0' } }
+]);
+
+// Find deployment agents
+const deployers = await pc.agents.findByCapability('deploy');
+
+if (deployers.length === 0) {
+  console.log('No deployment agents available');
+  process.exit(1);
+}
+
+// Send deployment request to first available agent
+const target = deployers[0];
+const { messageId } = await pc.agents.sendMessage(
+  target.id,
+  {
+    action: 'deploy',
+    environment: 'production',
+    version: '1.2.3',
+    services: ['api', 'worker']
+  },
+  { 
+    channel: 'deployments',
+    type: 'request'
+  }
+);
+
+console.log(`Deployment request sent to ${target.label}`);
+
+// Poll for response
+while (true) {
+  await new Promise(resolve => setTimeout(resolve, 5000));
+  
+  const messages = await pc.agents.getMessages({
+    channel: 'deployments',
+    unreadOnly: true
+  });
+  
+  const response = messages.find(m => m.type === 'response');
+  
+  if (response) {
+    console.log('Deployment complete:', response.payload);
+    await pc.agents.markRead([response.id]);
+    break;
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Services API" icon="server" href="/sdk/services-api">
+    Connect to services from your agents
+  </Card>
+  
+  <Card title="Sessions API" icon="clock" href="/sdk/sessions-api">
+    Create orchestration sessions
+  </Card>
+</CardGroup>

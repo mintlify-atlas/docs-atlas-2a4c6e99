@@ -1,0 +1,430 @@
+---
+title: connect dev
+description: Project-based multi-service development mode
+---
+
+The `connect dev` command connects to multiple services at once based on a project configuration file, streamlining multi-service development workflows.
+
+## Usage
+
+```bash
+connect dev [options]
+```
+
+## Options
+
+<ParamField path="--file" type="string">
+  Path to project config file (default: auto-detected)
+</ParamField>
+
+<ParamField path="--background" type="boolean" default={false}>
+  Run tunnels in background (experimental)
+</ParamField>
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to agent config file
+</ParamField>
+
+## Project Configuration
+
+Create a `pconnect.yml` or `pconnect.json` file in your project root:
+
+### YAML Format
+
+```yaml pconnect.yml
+services:
+  - name: postgres
+    port: 5432
+  - name: redis
+    port: 6379
+  - name: staging-api
+    port: 8080
+    protocol: http
+
+hub: https://hub.privateconnect.co  # optional
+```
+
+### JSON Format
+
+```json pconnect.json
+{
+  "services": [
+    {"name": "postgres", "port": 5432},
+    {"name": "redis", "port": 6379},
+    {"name": "staging-api", "port": 8080, "protocol": "http"}
+  ],
+  "hub": "https://hub.privateconnect.co"
+}
+```
+
+## Configuration Fields
+
+### Service Definition
+
+<ParamField path="name" type="string" required>
+  Service name (must match an exposed service on the hub)
+</ParamField>
+
+<ParamField path="port" type="number">
+  Local port to use. If omitted, uses the service's original port.
+</ParamField>
+
+<ParamField path="localPort" type="number">
+  Alias for `port`
+</ParamField>
+
+<ParamField path="protocol" type="string" default="tcp">
+  Protocol hint (tcp, http, https, udp)
+</ParamField>
+
+## Examples
+
+### Basic Usage
+
+```bash
+connect dev
+```
+
+Output:
+```
+🚀 Private Connect Dev Mode
+
+  Config: /Users/alex/project/pconnect.yml
+  Hub:    https://hub.privateconnect.co
+
+  Connecting to services...
+
+    [ok] postgres → localhost:5432
+    [ok] redis → localhost:6379
+    [ok] staging-api → localhost:8080
+
+  [ok] 3 service(s) connected:
+
+    postgres → localhost:5432
+    redis → localhost:6379
+    staging-api → localhost:8080
+
+  Set in your .env:
+    POSTGRES_URL=localhost:5432
+    REDIS_URL=localhost:6379
+    STAGING_API_URL=localhost:8080
+
+  Press Ctrl+C to disconnect all services
+```
+
+### Port Conflicts
+
+When a port is already in use:
+
+```bash
+connect dev
+```
+
+Output:
+```
+  Connecting to services...
+
+    [ok] postgres → localhost:15432 (was 5432)
+    [ok] redis → localhost:6379
+    [ok] staging-api → localhost:8080
+```
+
+Alternative ports are automatically selected.
+
+### Service Not Found
+
+```bash
+connect dev
+```
+
+Output:
+```
+  Connecting to services...
+
+    [!] old-service → failed: Service not found on hub
+    [ok] postgres → localhost:5432
+    [ok] redis → localhost:6379
+
+  [!] 1 service(s) failed:
+
+    old-service: Service not found on hub
+
+  [ok] 2 service(s) connected
+```
+
+### Initialize Configuration
+
+```bash
+connect dev init
+```
+
+Output:
+```
+[ok] Created pconnect.yml
+
+  Edit the file to configure your services, then run:
+    connect dev
+```
+
+Generated `pconnect.yml`:
+
+```yaml
+# Private Connect project config
+# Run: connect dev
+
+services:
+  - name: staging-db
+    port: 5432
+  - name: redis
+    port: 6379
+```
+
+If you're already authenticated and have services exposed, the init command will auto-populate the config with your current services.
+
+### Custom Config File
+
+```bash
+connect dev --file ./configs/staging.yml
+```
+
+## Behavior
+
+### Configuration Discovery
+
+The command searches for config files in this order:
+
+1. `--file` option if specified
+2. `pconnect.yml`
+3. `pconnect.yaml`
+4. `pconnect.json`
+5. `.pconnect.yml`
+6. `.pconnect.yaml`
+7. `.pconnect.json`
+
+Searches up to 3 parent directories.
+
+### Service Resolution
+
+For each service in the config:
+
+1. **Hub lookup**: Find service by name on the hub
+2. **Status check**: Verify service has an active tunnel
+3. **Port selection**: Use configured port or auto-select
+4. **Tunnel creation**: Create local tunnel to service
+
+### Port Strategy
+
+**Configured port:**
+```yaml
+services:
+  - name: postgres
+    port: 5432  # Always use 5432
+```
+
+**Auto-port:**
+```yaml
+services:
+  - name: postgres
+  # Uses service's original port if available
+```
+
+**Conflict resolution:**
+- If configured port is in use, auto-select next available
+- Notifies user of port change
+- Keeps track for next run
+
+### Environment Variables
+
+After connecting, the command shows environment variable suggestions:
+
+```bash
+STAGING_DB_URL=localhost:5432
+REDIS_URL=localhost:6379
+API_URL=localhost:8080
+```
+
+Variable names are generated from service names:
+- Convert to uppercase
+- Replace `-` with `_`
+- Append `_URL`
+
+### Shell Integration
+
+Updates `~/.privateconnect/shell-state.json` for shell prompt integration:
+
+```json
+{
+  "services": [
+    {"name": "postgres", "port": 5432},
+    {"name": "redis", "port": 6379}
+  ],
+  "workingDir": "/Users/alex/project"
+}
+```
+
+Enables shell prompts to show active services.
+
+## Use Cases
+
+### Microservices Development
+
+Connect to entire backend stack:
+
+```yaml pconnect.yml
+services:
+  - name: user-service
+    port: 8001
+  - name: auth-service
+    port: 8002
+  - name: payment-service
+    port: 8003
+  - name: postgres
+    port: 5432
+  - name: redis
+    port: 6379
+```
+
+```bash
+connect dev
+npm run dev  # All services available locally
+```
+
+### Frontend + Backend
+
+Connect to staging backend from frontend project:
+
+```yaml pconnect.yml
+services:
+  - name: staging-api
+    port: 8080
+  - name: staging-db
+    port: 5432
+```
+
+```bash
+connect dev
+npm run dev
+# Frontend talks to staging API on localhost:8080
+```
+
+### Testing
+
+Connect to test dependencies:
+
+```yaml pconnect.test.yml
+services:
+  - name: test-db
+    port: 5433
+  - name: test-redis
+    port: 6380
+```
+
+```bash
+connect dev --file pconnect.test.yml
+npm run test:integration
+```
+
+### Monorepo
+
+Different configs per package:
+
+```
+packages/
+  frontend/
+    pconnect.yml  # staging-api, staging-cdn
+  backend/
+    pconnect.yml  # postgres, redis, rabbitmq
+  worker/
+    pconnect.yml  # redis, rabbitmq
+```
+
+```bash
+cd packages/frontend
+connect dev
+```
+
+## Exit Codes
+
+- `0` - All services connected and disconnected gracefully
+- `1` - No config found, no services defined, or all services failed
+
+## Related Commands
+
+- [`connect reach`](/cli/reach) - Connect to individual services
+- [`connect clone`](/cli/clone) - Clone entire agent environment
+- [`connect expose`](/cli/expose) - Expose services for others to use
+
+## Troubleshooting
+
+### No Config Found
+
+```bash
+connect dev
+```
+
+Output:
+```
+[!] No project config found.
+
+  Create a pconnect.yml file:
+
+    services:
+      - name: staging-db
+        port: 5432
+      - name: redis
+        port: 6379
+```
+
+Solution:
+```bash
+connect dev init
+# Edit pconnect.yml
+connect dev
+```
+
+### Service Not Found
+
+```
+[!] 1 service(s) failed:
+  my-service: Service not found on hub
+```
+
+Check available services:
+```bash
+curl https://hub.privateconnect.co/v1/services \
+  -H "x-api-key: pk_xxx"
+```
+
+Or ask teammate to expose:
+```bash
+connect expose localhost:8080 --name my-service
+```
+
+### Service Offline
+
+```
+[!] 1 service(s) failed:
+  postgres: Service has no active tunnel
+```
+
+The service's agent is offline. Ask teammate to:
+```bash
+connect up
+connect expose localhost:5432 --name postgres
+```
+
+### All Services Failed
+
+```
+[x] No services connected.
+```
+
+Verify:
+1. You're authenticated: `connect up`
+2. Hub URL is correct
+3. Services exist and are online
+4. Network connectivity

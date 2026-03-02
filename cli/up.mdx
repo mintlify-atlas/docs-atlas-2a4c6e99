@@ -1,0 +1,217 @@
+---
+title: connect up
+description: Start the Private Connect agent and authenticate
+---
+
+The `connect up` command starts the Private Connect agent, authenticates with the hub, and prepares your system to expose and reach services.
+
+## Usage
+
+```bash
+connect up [options]
+```
+
+## Options
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL to connect to
+</ParamField>
+
+<ParamField path="--api-key" type="string">
+  API key for authentication. If not provided, will use device authorization flow.
+</ParamField>
+
+<ParamField path="--label" type="string">
+  Human-readable label for this agent (e.g., "alex-macbook")
+</ParamField>
+
+<ParamField path="--name" type="string">
+  Optional friendly name for the agent
+</ParamField>
+
+<ParamField path="--token" type="string">
+  Pre-authenticated token (for CI/CD). Can also be set via `PRIVATECONNECT_TOKEN` environment variable.
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+## First-Time Setup
+
+On first run, `connect up` will:
+
+1. Authenticate using device authorization flow
+2. Generate a unique agent ID
+3. Save configuration to `~/.privateconnect/config.json`
+4. Set up the daemon (optional)
+5. Configure DNS settings (macOS)
+6. Prompt to expose your first service
+
+### Interactive Authentication
+
+```bash
+connect up
+```
+
+Output:
+```
+🚀 Starting Private Connect Agent...
+
+  First time setup - authenticating...
+  
+  → Visit: https://app.privateconnect.co/device
+  → Enter code: ABCD-1234
+  
+  Waiting for authorization...
+  
+[ok] Authentication complete!
+[ok] Agent registered
+```
+
+### Using an API Key
+
+```bash
+connect up --api-key pk_live_xxxxxxxxxxxx
+```
+
+### CI/CD Mode
+
+For automated environments:
+
+```bash
+export PRIVATECONNECT_TOKEN=tok_xxxxxxxxxxxx
+connect up
+```
+
+## Behavior
+
+### Existing Configuration
+
+If you've already authenticated, `connect up` will:
+- Use the existing configuration
+- Register with the hub
+- Connect via WebSocket
+- Stay running in the foreground
+
+### Zero-Touch Setup
+
+On macOS and Linux, `connect up` automatically:
+- Installs the daemon for background operation
+- Configures DNS resolution for `.localhost` domains (macOS)
+- Prompts to expose your first service
+
+### Token Expiry Handling
+
+If your stored credentials are invalid or expired:
+
+```bash
+connect up
+```
+
+Output:
+```
+[!] Stored credentials are invalid or expired
+  Clearing old config and re-authenticating...
+  
+  → Visit: https://app.privateconnect.co/device
+  → Enter code: WXYZ-5678
+```
+
+The CLI will automatically:
+1. Clear stale configuration
+2. Restart device authentication
+3. Save new credentials
+
+## Examples
+
+### Basic Setup
+
+```bash
+connect up
+```
+
+### Custom Label
+
+```bash
+connect up --label "staging-server"
+```
+
+### Self-Hosted Hub
+
+```bash
+connect up --hub https://hub.mycompany.com
+```
+
+### With Custom Name
+
+```bash
+connect up --name "Alex's Laptop" --label alex-macbook
+```
+
+## Configuration File
+
+After running `connect up`, configuration is stored at:
+- **macOS/Linux**: `~/.privateconnect/config.json`
+- **Windows**: `%USERPROFILE%\.privateconnect\config.json`
+
+Example configuration:
+
+```json
+{
+  "agentId": "agent_2Nz5X8kQp3r9",
+  "token": "tok_live_xxxxxxxxxxxx",
+  "apiKey": "pk_live_xxxxxxxxxxxx",
+  "hubUrl": "https://hub.privateconnect.co",
+  "label": "alex-macbook",
+  "name": "Alex's MacBook Pro",
+  "workspaceId": "ws_abc123"
+}
+```
+
+## Exit Codes
+
+- `0` - Agent connected successfully
+- `1` - Authentication failed, network error, or invalid credentials
+
+## Related Commands
+
+- [`connect daemon`](/cli/daemon) - Manage background daemon
+- [`connect expose`](/cli/expose) - Expose services after connecting
+- [`connect reach`](/cli/reach) - Access remote services
+
+## Troubleshooting
+
+### Connection Errors
+
+If you see connection errors:
+
+```bash
+[x] Connection error: ECONNREFUSED
+```
+
+Check:
+1. Your internet connection
+2. Hub URL is correct
+3. Firewall settings allow outbound connections
+
+### Invalid Token
+
+If authentication fails:
+
+```bash
+[x] Invalid token
+```
+
+1. Clear the config: `rm ~/.privateconnect/config.json`
+2. Re-authenticate: `connect up`
+
+### HTTPS Enforcement
+
+The CLI enforces HTTPS for non-localhost hub URLs:
+
+```bash
+connect up --hub http://hub.example.com  # ❌ Will fail
+connect up --hub https://hub.example.com # ✅ OK
+connect up --hub http://localhost:3001   # ✅ OK (localhost allowed)
+```

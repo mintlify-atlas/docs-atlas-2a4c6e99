@@ -1,0 +1,261 @@
+---
+title: connect expose
+description: Expose a local service to your Private Connect network
+---
+
+The `connect expose` command makes a local service accessible to your teammates through the Private Connect hub.
+
+## Usage
+
+```bash
+connect expose <target> --name <service-name> [options]
+```
+
+## Arguments
+
+<ParamField path="target" type="string" required>
+  Target to expose in the format `host:port` (e.g., `localhost:3306` or `192.168.1.10:8080`)
+</ParamField>
+
+## Options
+
+<ParamField path="--name" type="string" required>
+  Service name that teammates will use to connect
+</ParamField>
+
+<ParamField path="--hub" type="string" default="https://hub.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--api-key" type="string">
+  API key for authentication (if not already configured)
+</ParamField>
+
+<ParamField path="--protocol" type="string" default="tcp">
+  Protocol: `tcp`, `udp`, `http`, or `https`
+</ParamField>
+
+<ParamField path="--public" type="boolean" default={false}>
+  Create a public URL accessible from anywhere (HTTP/HTTPS services only)
+</ParamField>
+
+<ParamField path="--link" type="boolean" default={false}>
+  Automatically create a shareable public link
+</ParamField>
+
+<ParamField path="--link-expires" type="string" default="24h">
+  Link expiration time (e.g., "1h", "24h", "7d")
+</ParamField>
+
+<ParamField path="--debug" type="boolean" default={false}>
+  Enable debug mode with live traffic inspection
+</ParamField>
+
+<ParamField path="--ai-enabled" type="boolean" default={false}>
+  Enable AI copilot for debug sessions
+</ParamField>
+
+<ParamField path="--config" type="string">
+  Path to custom config file
+</ParamField>
+
+## Examples
+
+### Expose a Database
+
+```bash
+connect expose localhost:5432 --name postgres
+```
+
+Output:
+```
+🔗 Exposing localhost:5432 as "postgres"...
+
+  Agent ID: agent_xxx
+  Label:    alex-macbook
+  Hub URL:  https://hub.privateconnect.co
+
+[ok] Service registered
+  Service ID: svc_xxx
+  Tunnel Port: 45001
+  Protocol: tcp
+
+[ok] Tunnel established
+
+📡 Service "postgres" is now accessible through the hub
+
+  From another machine:
+  $ connect reach postgres
+  This creates a local tunnel so the service appears on localhost
+
+  Running initial diagnostics...
+
+  [ok] postgres is REACHABLE
+    DNS [ok]  TCP [ok]  52ms
+
+  Press Ctrl+C to stop exposing
+```
+
+### Expose with Public URL
+
+```bash
+connect expose localhost:3000 --name api --public
+```
+
+Output:
+```
+🔗 Exposing localhost:3000 as "api"...
+
+[ok] Service registered
+[ok] Tunnel established
+
+🌐 Public URL: https://api-abc123.privateconnect.co
+  External services (Stripe, GitHub, etc.) can send webhooks to this URL
+
+📡 Service "api" is now accessible through the hub
+
+  From another machine:
+  $ connect reach api
+
+  Want a public URL anyone can open?
+  $ connect link api
+
+  Press Ctrl+C to stop exposing
+```
+
+### Expose with Auto-Link
+
+```bash
+connect expose localhost:8080 --name staging-api --link --link-expires 7d
+```
+
+Output:
+```
+🔗 Public URL: https://abc123xyz.privateconnect.co
+  Expires: Mon Jan 15 2024 10:30:00 GMT-0800
+```
+
+### Expose UDP Service
+
+```bash
+connect expose localhost:1194 --name vpn --protocol udp
+```
+
+### Expose with Debug Mode
+
+```bash
+connect expose localhost:3000 --name api --debug --ai-enabled
+```
+
+Output:
+```
+🔍 Debug mode enabled
+  Share this link: https://app.privateconnect.co/debug/xyz789
+  Anyone with this link can see live traffic
+  AI Copilot: enabled
+```
+
+## Behavior
+
+### Service Registration
+
+When you expose a service:
+1. The CLI registers the service with the hub
+2. A tunnel is established via WebSocket
+3. The hub assigns a unique tunnel port
+4. Diagnostic checks run automatically
+
+### Protocol Detection
+
+Common ports are automatically detected:
+- Port `5432` → `postgres`
+- Port `3306` → `mysql`
+- Port `6379` → `redis`
+- Port `27017` → `mongodb`
+- Port `3000` → `web`
+
+### Public URLs
+
+The `--public` flag creates a publicly accessible URL for HTTP/HTTPS services.
+
+<Warning>
+  Public URLs are blocked for database services (PostgreSQL, MySQL, Redis, MongoDB) for security. Use `connect reach` instead.
+</Warning>
+
+### Automatic Reconnection
+
+The agent automatically reconnects if:
+- Network connection drops
+- Hub server restarts
+- WebSocket timeout occurs
+
+### HTTP Request Handling
+
+For public HTTP services, requests are proxied through WebSocket:
+1. Hub receives HTTP request
+2. Request forwarded to agent via WebSocket
+3. Agent proxies to local service
+4. Response sent back through WebSocket
+5. Hub returns response to client
+
+Large responses (>5MB) are automatically chunked.
+
+## Diagnostics
+
+After exposing a service, automatic diagnostics check:
+- **DNS**: Name resolution
+- **TCP**: Port connectivity
+- **TLS**: Certificate validation (if HTTPS)
+- **HTTP**: Health check (if HTTP/HTTPS)
+- **Latency**: Round-trip time
+
+## Exit Codes
+
+- `0` - Service exposed successfully (when stopped with Ctrl+C)
+- `1` - Registration failed, network error, or invalid target
+
+## Related Commands
+
+- [`connect reach`](/cli/reach) - Access exposed services
+- [`connect up`](/cli/up) - Start agent before exposing
+- [`connect share`](/cli/share) - Share entire environment
+
+## Troubleshooting
+
+### Service Unreachable
+
+If diagnostics show `UNREACHABLE`:
+
+```
+[x] api is UNREACHABLE
+  TCP [x] FAIL
+  Check that your service is running on the target port
+```
+
+Verify:
+1. The service is running: `curl localhost:3000`
+2. Port number is correct
+3. No firewall blocking local connections
+
+### Port Conflicts
+
+If the target port is wrong:
+```bash
+[x] Invalid target format. Use host:port (e.g., 127.0.0.1:8080)
+```
+
+Use the correct format:
+```bash
+connect expose localhost:8080 --name api  # ✅ Correct
+connect expose 8080 --name api            # ❌ Invalid
+```
+
+### API Key Required
+
+If you haven't authenticated:
+```bash
+[x] API key required for first-time setup
+  Run connect login <your-api-key> to save it once
+```
+
+Run `connect up` first to authenticate.

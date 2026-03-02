@@ -1,0 +1,531 @@
+---
+title: 'Services API'
+description: 'Register services, run diagnostics, and manage public access'
+---
+
+## Overview
+
+Services represent applications or databases exposed by agents. The Services API provides endpoints for registration, health monitoring, diagnostics, and public URL management.
+
+## Register Service
+
+Register a new service exposed by an agent.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.privateconnect.co/v1/services/register \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentId": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "prod-db",
+    "targetHost": "localhost",
+    "targetPort": 5432,
+    "protocol": "tcp",
+    "isPublic": false
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.privateconnect.co/v1/services/register', {
+  method: 'POST',
+  headers: {
+    'x-api-key': 'pc_your_api_key',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    agentId: '550e8400-e29b-41d4-a716-446655440000',
+    name: 'prod-db',
+    targetHost: 'localhost',
+    targetPort: 5432,
+    protocol: 'tcp'
+  })
+});
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.privateconnect.co/v1/services/register',
+    headers={'x-api-key': 'pc_your_api_key'},
+    json={
+        'agentId': '550e8400-e29b-41d4-a716-446655440000',
+        'name': 'prod-db',
+        'targetHost': 'localhost',
+        'targetPort': 5432,
+        'protocol': 'tcp'
+    }
+)
+data = response.json()
+```
+</CodeGroup>
+
+**Request Body:**
+
+<ParamField body="agentId" type="string" required>
+  UUID of the agent exposing this service
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Service name (1-100 characters, alphanumeric, hyphens, underscores)
+</ParamField>
+
+<ParamField body="targetHost" type="string" required>
+  Target hostname (e.g., `localhost`, `127.0.0.1`). Max 253 characters.
+</ParamField>
+
+<ParamField body="targetPort" type="number" required>
+  Target port number (1-65535)
+</ParamField>
+
+<ParamField body="protocol" type="string" default="auto">
+  Protocol: `auto`, `tcp`, `udp`, `http`, `https`
+</ParamField>
+
+<ParamField body="isPublic" type="boolean" default="false">
+  Make publicly accessible via generated URL
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "service": {
+    "id": "svc_123",
+    "name": "prod-db",
+    "tunnelPort": 50123,
+    "status": "active",
+    "protocol": "tcp",
+    "isPublic": false,
+    "publicUrl": null
+  }
+}
+```
+
+<ResponseField name="tunnelPort" type="number">
+  Port on the hub where the service is accessible via tunnel
+</ResponseField>
+
+## Create External Service
+
+Register an external service target (not exposed by an agent). Useful for monitoring external APIs or databases.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/services/external \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "external-api",
+    "targetHost": "api.example.com",
+    "targetPort": 443,
+    "protocol": "https"
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="name" type="string" required>
+  Service name
+</ParamField>
+
+<ParamField body="targetHost" type="string" required>
+  External hostname or IP
+</ParamField>
+
+<ParamField body="targetPort" type="number" required>
+  External port
+</ParamField>
+
+<ParamField body="protocol" type="string" default="auto">
+  Protocol: `auto`, `tcp`, `udp`, `http`, `https`
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "service": {
+    "id": "svc_456",
+    "name": "external-api",
+    "targetHost": "api.example.com",
+    "targetPort": 443,
+    "protocol": "https",
+    "isExternal": true
+  }
+}
+```
+
+<Note>
+  An initial health check runs automatically when creating an external service.
+</Note>
+
+## List Services
+
+Retrieve all services in the workspace.
+
+```bash
+curl https://api.privateconnect.co/v1/services \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "svc_123",
+    "name": "prod-db",
+    "agentId": "550e8400-e29b-41d4-a716-446655440000",
+    "targetHost": "localhost",
+    "targetPort": 5432,
+    "tunnelPort": 50123,
+    "protocol": "tcp",
+    "status": "active",
+    "isPublic": false,
+    "isExternal": false,
+    "lastCheckAt": "2026-03-02T10:00:00.000Z",
+    "createdAt": "2026-03-01T10:00:00.000Z"
+  }
+]
+```
+
+## Get Service Details
+
+Retrieve details for a specific service.
+
+```bash
+curl https://api.privateconnect.co/v1/services/svc_123 \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "id": "svc_123",
+  "name": "prod-db",
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "targetHost": "localhost",
+  "targetPort": 5432,
+  "tunnelPort": 50123,
+  "protocol": "tcp",
+  "status": "active",
+  "isPublic": false,
+  "publicSubdomain": null,
+  "publicUrl": null,
+  "lastCheckAt": "2026-03-02T10:00:00.000Z",
+  "lastCheckStatus": "OK",
+  "createdAt": "2026-03-01T10:00:00.000Z"
+}
+```
+
+## Update Service
+
+Update service properties like name.
+
+```bash
+curl -X PATCH https://api.privateconnect.co/v1/services/svc_123 \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "production-database"
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="name" type="string">
+  New service name (1-100 characters, alphanumeric, hyphens, underscores)
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "service": {
+    "id": "svc_123",
+    "name": "production-database"
+  }
+}
+```
+
+## Delete Service
+
+Delete a service from the workspace.
+
+```bash
+curl -X DELETE https://api.privateconnect.co/v1/services/svc_123 \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+## Diagnostics
+
+### Run Service Check
+
+Run a diagnostic check on a service to verify connectivity and health.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/services/svc_123/check \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "diagnostic": {
+    "id": "diag_123",
+    "serviceId": "svc_123",
+    "tcpStatus": "OK",
+    "tcpLatencyMs": 12,
+    "tlsStatus": "N/A",
+    "httpStatus": "N/A",
+    "perspective": "hub",
+    "timestamp": "2026-03-02T10:00:00.000Z"
+  },
+  "service": {
+    "id": "svc_123",
+    "status": "active",
+    "lastCheckAt": "2026-03-02T10:00:00.000Z"
+  }
+}
+```
+
+<ResponseField name="diagnostic.perspective" type="string">
+  Diagnostic perspective: `hub` (from control plane) or `agent` (from specific agent)
+</ResponseField>
+
+### Get Diagnostic History
+
+Retrieve diagnostic history for a service.
+
+```bash
+curl "https://api.privateconnect.co/v1/services/svc_123/diagnostics?limit=50" \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Query Parameters:**
+
+<ParamField query="limit" type="number" default="50">
+  Limit number of results
+</ParamField>
+
+**Response:**
+
+```json
+[
+  {
+    "id": "diag_123",
+    "serviceId": "svc_123",
+    "tcpStatus": "OK",
+    "tcpLatencyMs": 12,
+    "tlsStatus": "N/A",
+    "httpStatus": "OK",
+    "httpStatusCode": 200,
+    "httpLatencyMs": 45,
+    "perspective": "hub",
+    "sourceAgent": null,
+    "timestamp": "2026-03-02T10:00:00.000Z"
+  }
+]
+```
+
+### Reach Check
+
+Test connectivity to a service from a specific agent (agent perspective diagnostics).
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/services/svc_123/reach \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sourceAgentId": "550e8400-e29b-41d4-a716-446655440000",
+    "mode": "tcp",
+    "timeoutMs": 5000
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="sourceAgentId" type="string" required>
+  UUID of the agent to test connectivity from
+</ParamField>
+
+<ParamField body="mode" type="string" default="tcp">
+  Test mode: `tcp`, `tls`, `http`
+</ParamField>
+
+<ParamField body="timeoutMs" type="number" default="5000">
+  Timeout in milliseconds (1000-30000)
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "diagnostic": {
+    "id": "diag_124",
+    "perspective": "agent",
+    "sourceAgent": "web-server-1",
+    "tcpStatus": "OK",
+    "tcpLatencyMs": 8
+  },
+  "session": {
+    "id": "sess_123",
+    "outcome": "success"
+  }
+}
+```
+
+<Note>
+  Reach checks create diagnostic sessions for tracking agent-to-service connectivity patterns.
+</Note>
+
+## Public Access
+
+### Set Custom Subdomain
+
+Set a custom vanity subdomain for public access to a service.
+
+```bash
+curl -X PATCH https://api.privateconnect.co/v1/services/svc_123/subdomain \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subdomain": "my-staging-api"
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="subdomain" type="string">
+  Custom subdomain (3-32 characters, lowercase alphanumeric and hyphens). Set to `null` to clear.
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "service": {
+    "id": "svc_123",
+    "publicSubdomain": "pc-my-staging-api",
+    "isPublic": true,
+    "publicUrl": "https://pc-my-staging-api.privateconnect.co"
+  }
+}
+```
+
+<Note>
+  Subdomains are automatically prefixed with `pc-` to prevent conflicts. The service must have `isPublic: true`.
+</Note>
+
+### Check Subdomain Availability
+
+Check if a subdomain is available and valid.
+
+```bash
+curl "https://api.privateconnect.co/v1/services/svc_123/subdomain/check?subdomain=my-staging-api" \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Query Parameters:**
+
+<ParamField query="subdomain" type="string" required>
+  Subdomain to check
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "available": true,
+  "valid": true,
+  "subdomain": "pc-my-staging-api",
+  "publicUrl": "https://pc-my-staging-api.privateconnect.co"
+}
+```
+
+If unavailable or invalid:
+
+```json
+{
+  "available": false,
+  "valid": true,
+  "error": "Subdomain is already taken"
+}
+```
+
+## Protocol Detection
+
+The `protocol` field supports auto-detection:
+
+<AccordionGroup>
+  <Accordion title="auto (default)">
+    Automatically detect protocol based on port:
+    - Port 80, 8080, 3000, 5000 → `http`
+    - Port 443, 8443 → `https`
+    - Port 5432 → PostgreSQL (tcp)
+    - Port 3306 → MySQL (tcp)
+    - Port 27017 → MongoDB (tcp)
+    - Port 6379 → Redis (tcp)
+    - All other ports → `tcp`
+  </Accordion>
+
+  <Accordion title="tcp">
+    Raw TCP connection. Works for databases, custom protocols, and any TCP service.
+  </Accordion>
+
+  <Accordion title="udp">
+    UDP protocol. For services like DNS, VoIP, game servers.
+  </Accordion>
+
+  <Accordion title="http">
+    HTTP protocol. Enables HTTP-specific diagnostics like status code checking.
+  </Accordion>
+
+  <Accordion title="https">
+    HTTPS protocol with TLS. Validates certificates and enables secure proxying.
+  </Accordion>
+</AccordionGroup>
+
+## Service Status
+
+Services have the following status values:
+
+- `active` - Service is running and accessible
+- `inactive` - Service is registered but not currently accessible
+- `error` - Service encountered an error during last health check
+- `unknown` - Service status has not been checked yet
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Health Monitoring" icon="heart-pulse">
+    Run periodic diagnostic checks to monitor service health. Set up webhooks to receive alerts when services go down.
+  </Card>
+  <Card title="Public Services" icon="globe">
+    Only make services public when necessary. Use shares with access control for temporary external access.
+  </Card>
+  <Card title="Naming Convention" icon="tag">
+    Use descriptive names like `prod-api`, `staging-db`, `dev-redis` to easily identify services.
+  </Card>
+  <Card title="External Services" icon="cloud">
+    Use external services to monitor third-party APIs and databases that aren't behind agents.
+  </Card>
+</CardGroup>

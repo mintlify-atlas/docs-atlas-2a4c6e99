@@ -1,0 +1,604 @@
+---
+title: 'Agents API'
+description: 'Register and manage agents, capabilities, and orchestration'
+---
+
+## Overview
+
+Agents are lightweight clients that run in your infrastructure to expose services and enable connectivity. The Agents API provides endpoints for registration, heartbeat monitoring, capability management, and agent-to-agent messaging.
+
+## Provision Agent Token
+
+Create a short-lived agent token programmatically. Used by AI agent runtimes to get workspace access without the device authorization flow.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.privateconnect.co/v1/agents/provision \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientType": "cursor",
+    "label": "staging",
+    "name": "cursor-agent-1",
+    "ttlSeconds": 7200
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.privateconnect.co/v1/agents/provision', {
+  method: 'POST',
+  headers: {
+    'x-api-key': 'pc_your_api_key',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    clientType: 'cursor',
+    label: 'staging',
+    ttlSeconds: 7200
+  })
+});
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.privateconnect.co/v1/agents/provision',
+    headers={'x-api-key': 'pc_your_api_key'},
+    json={
+        'clientType': 'cursor',
+        'label': 'staging',
+        'ttlSeconds': 7200
+    }
+)
+data = response.json()
+```
+</CodeGroup>
+
+**Request Body:**
+
+<ParamField body="clientType" type="string" required>
+  The tool requesting access. Valid values: `cursor`, `windsurf`, `copilot`, `cline`, `aider`, `continue`, `bolt`, `v0`, `replit`, `custom`
+</ParamField>
+
+<ParamField body="label" type="string">
+  Environment label (e.g., `production`, `staging`). Max 100 characters.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Agent name (e.g., `cursor-agent-1`). Max 100 characters.
+</ParamField>
+
+<ParamField body="ttlSeconds" type="number">
+  Token lifetime in seconds. Min: 60, Max: 86400, Default: 7200 (2 hours)
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "token": "agent_tok_1234567890abcdefghijklmnop",
+  "expiresAt": "2026-03-02T12:00:00.000Z",
+  "workspaceId": "ws_123",
+  "workspaceName": "my-workspace"
+}
+```
+
+<Note>
+  Save the `token` value - it cannot be retrieved later. The token expires after `ttlSeconds`.
+</Note>
+
+## Register Agent
+
+Register a new agent in the workspace with a pre-generated token.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/agents/register \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentId": "550e8400-e29b-41d4-a716-446655440000",
+    "token": "agent_tok_1234567890abcdefghijklmnop",
+    "label": "production",
+    "name": "web-server-1"
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="agentId" type="string" required>
+  UUID for the agent
+</ParamField>
+
+<ParamField body="token" type="string" required>
+  Agent authentication token (min 32 characters)
+</ParamField>
+
+<ParamField body="label" type="string">
+  Environment label
+</ParamField>
+
+<ParamField body="name" type="string">
+  Agent display name
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "agent": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "web-server-1",
+    "label": "production",
+    "workspaceId": "ws_123",
+    "createdAt": "2026-03-02T10:00:00.000Z"
+  }
+}
+```
+
+## Agent Heartbeat
+
+Update agent last-seen timestamp. Called periodically by connected agents to maintain online status.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/agents/heartbeat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentId": "550e8400-e29b-41d4-a716-446655440000",
+    "token": "agent_tok_1234567890abcdefghijklmnop"
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="agentId" type="string" required>
+  Agent UUID
+</ParamField>
+
+<ParamField body="token" type="string" required>
+  Agent token
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+## List Agents
+
+Retrieve all agents in the workspace.
+
+```bash
+curl https://api.privateconnect.co/v1/agents \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "web-server-1",
+    "label": "production",
+    "isOnline": true,
+    "lastSeenAt": "2026-03-02T10:00:00.000Z",
+    "createdAt": "2026-03-01T10:00:00.000Z"
+  }
+]
+```
+
+## List Online Agents
+
+Retrieve only currently online agents.
+
+```bash
+curl https://api.privateconnect.co/v1/agents/online \
+  -H "x-api-key: pc_your_api_key"
+```
+
+## Get Agent Details
+
+Retrieve details for a specific agent.
+
+```bash
+curl https://api.privateconnect.co/v1/agents/550e8400-e29b-41d4-a716-446655440000 \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "web-server-1",
+  "label": "production",
+  "workspaceId": "ws_123",
+  "isOnline": true,
+  "lastSeenAt": "2026-03-02T10:00:00.000Z",
+  "createdAt": "2026-03-01T10:00:00.000Z",
+  "capabilities": [
+    {
+      "name": "gpu",
+      "metadata": { "model": "A100" }
+    }
+  ],
+  "services": []
+}
+```
+
+## Rotate Agent Token
+
+Generate a new token for an agent. The current valid token must be provided.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/agents/rotate-token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentId": "550e8400-e29b-41d4-a716-446655440000",
+    "currentToken": "agent_tok_old_token"
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="agentId" type="string" required>
+  Agent UUID
+</ParamField>
+
+<ParamField body="currentToken" type="string" required>
+  Current valid token
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "newToken": "agent_tok_new_token_here",
+  "expiresAt": "2026-03-03T10:00:00.000Z"
+}
+```
+
+## Capability Management
+
+### Register Capabilities
+
+Register capabilities for an agent (e.g., GPU, high-memory, specific tools).
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/agents/550e8400-e29b-41d4-a716-446655440000/capabilities \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "capabilities": [
+      {
+        "name": "gpu",
+        "metadata": { "model": "A100", "vram": "80GB" }
+      },
+      {
+        "name": "high-memory",
+        "metadata": { "ram": "256GB" }
+      }
+    ]
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="capabilities" type="array" required>
+  Array of capability objects
+  <Expandable title="Capability Object">
+    <ParamField body="name" type="string" required>
+      Capability name (e.g., `gpu`, `high-memory`, `docker`)
+    </ParamField>
+    <ParamField body="metadata" type="object">
+      Additional capability metadata
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Find Agents by Capability
+
+Find agents that have a specific capability.
+
+```bash
+curl https://api.privateconnect.co/v1/agents/by-capability/gpu \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "agents": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "gpu-worker-1",
+      "isOnline": true,
+      "capability": {
+        "name": "gpu",
+        "metadata": { "model": "A100" }
+      }
+    }
+  ]
+}
+```
+
+## Agent Orchestration
+
+### Get Orchestration View
+
+Retrieve all agents with their capabilities and services for orchestration.
+
+```bash
+curl https://api.privateconnect.co/v1/agents/orchestration \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "agents": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "web-server-1",
+      "label": "production",
+      "isOnline": true,
+      "lastSeenAt": "2026-03-02T10:00:00.000Z",
+      "capabilities": [
+        { "name": "gpu", "metadata": { "model": "A100" } }
+      ],
+      "services": [
+        {
+          "id": "svc_123",
+          "name": "prod-db",
+          "targetPort": 5432,
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Agent Messaging
+
+### Send Message to Agent
+
+Send a message from one agent to another.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/agents/550e8400-e29b-41d4-a716-446655440000/messages/send \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toAgentId": "660e8400-e29b-41d4-a716-446655440001",
+    "payload": { "action": "process", "data": "example" },
+    "channel": "tasks",
+    "type": "request",
+    "ttlSeconds": 300
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="toAgentId" type="string" required>
+  Target agent UUID
+</ParamField>
+
+<ParamField body="payload" type="object" required>
+  Message payload (any JSON object)
+</ParamField>
+
+<ParamField body="channel" type="string">
+  Message channel (for filtering)
+</ParamField>
+
+<ParamField body="type" type="string">
+  Message type: `request`, `response`, `event`, `broadcast`
+</ParamField>
+
+<ParamField body="correlationId" type="string">
+  Correlation ID for request/response matching
+</ParamField>
+
+<ParamField body="ttlSeconds" type="number">
+  Message time-to-live in seconds
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "messageId": "msg_123",
+  "expiresAt": "2026-03-02T10:05:00.000Z"
+}
+```
+
+### Broadcast Message
+
+Broadcast a message to all agents in the workspace.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/agents/550e8400-e29b-41d4-a716-446655440000/messages/broadcast \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payload": { "announcement": "maintenance in 1 hour" },
+    "channel": "system",
+    "ttlSeconds": 3600
+  }'
+```
+
+### Get Agent Messages
+
+Retrieve messages for an agent with optional filtering.
+
+```bash
+curl "https://api.privateconnect.co/v1/agents/550e8400-e29b-41d4-a716-446655440000/messages?channel=tasks&unreadOnly=true&limit=50" \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Query Parameters:**
+
+<ParamField query="channel" type="string">
+  Filter by channel
+</ParamField>
+
+<ParamField query="unreadOnly" type="boolean">
+  Only return unread messages (default: true)
+</ParamField>
+
+<ParamField query="limit" type="number">
+  Limit number of messages returned
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "messages": [
+    {
+      "id": "msg_123",
+      "from": "660e8400-e29b-41d4-a716-446655440001",
+      "channel": "tasks",
+      "type": "request",
+      "payload": { "action": "process", "data": "example" },
+      "correlationId": "req_456",
+      "createdAt": "2026-03-02T10:00:00.000Z",
+      "readAt": null
+    }
+  ]
+}
+```
+
+### Mark Messages as Read
+
+Mark specific messages as read.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/agents/550e8400-e29b-41d4-a716-446655440000/messages/read \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messageIds": ["msg_123", "msg_124"]
+  }'
+```
+
+## Remote Commands
+
+### Send Command to Agent
+
+Send a command to an agent for remote control.
+
+```bash
+curl -X POST https://api.privateconnect.co/v1/agents/550e8400-e29b-41d4-a716-446655440000/command \
+  -H "x-api-key: pc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "expose",
+    "params": {
+      "target": "localhost:5432",
+      "name": "prod-db",
+      "protocol": "tcp"
+    }
+  }'
+```
+
+**Request Body:**
+
+<ParamField body="action" type="string" required>
+  Command action: `restart`, `stop`, `expose`, `reach`, `status`
+</ParamField>
+
+<ParamField body="params" type="object">
+  Action-specific parameters
+  <Expandable title="Expose Parameters">
+    <ParamField body="target" type="string">
+      Target host:port or service name
+    </ParamField>
+    <ParamField body="name" type="string">
+      Service name
+    </ParamField>
+    <ParamField body="protocol" type="string">
+      Protocol: `auto`, `tcp`, `udp`, `http`, `https`
+    </ParamField>
+    <ParamField body="isPublic" type="boolean">
+      Make publicly accessible
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "commandId": "cmd_123",
+  "message": "Command 'expose' sent to agent",
+  "agentOnline": true
+}
+```
+
+<Note>
+  If the agent is offline, the command is queued for delivery when the agent reconnects.
+</Note>
+
+## Audit Logs
+
+### Get Agent Audit Logs
+
+Retrieve security audit logs for a specific agent.
+
+```bash
+curl https://api.privateconnect.co/v1/agents/550e8400-e29b-41d4-a716-446655440000/audit-logs \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "logs": [
+    {
+      "id": "log_123",
+      "action": "token_rotated",
+      "timestamp": "2026-03-02T10:00:00.000Z",
+      "metadata": { "oldTokenPrefix": "agent_tok_old" }
+    }
+  ]
+}
+```
+
+### Get Agents with Expiring Tokens
+
+Retrieve agents whose tokens will expire soon.
+
+```bash
+curl https://api.privateconnect.co/v1/agents/expiring-tokens \
+  -H "x-api-key: pc_your_api_key"
+```
+
+**Response:**
+
+```json
+{
+  "agents": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "web-server-1",
+      "tokenExpiresAt": "2026-03-02T12:00:00.000Z",
+      "hoursUntilExpiry": 2
+    }
+  ]
+}
+```
