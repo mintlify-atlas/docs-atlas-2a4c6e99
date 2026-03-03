@@ -1,0 +1,177 @@
+---
+title: connect whoami
+description: Display agent identity and workspace information
+---
+
+Show information about the current agent, including identity, workspace membership, and configuration.
+
+## Usage
+
+```bash
+connect whoami [options]
+```
+
+## Basic Example
+
+```bash
+connect whoami
+```
+
+Output:
+```
+Agent Identity
+────────────────────────────────────────
+Agent ID:     agent_abc123xyz789
+Agent Name:   Production Server
+Label:        prod-api-01
+Hub URL:      https://api.privateconnect.co
+
+Workspace
+────────────────────────────────────────
+Workspace ID: ws_def456uvw012
+Workspace:    Acme Inc
+Role:         member
+
+Services
+────────────────────────────────────────
+Exposed:      3 services
+  • postgres (5432)
+  • redis (6379)
+  • api (8080)
+
+Connected:    2 services
+  • staging-db (5432)
+  • cache (6379)
+
+Status:       ✓ Online
+Last Seen:    2 seconds ago
+```
+
+## Options
+
+<ParamField path="--json" type="boolean">
+  Output as JSON
+</ParamField>
+
+<ParamField path="--config, -c" type="string">
+  Config file path
+</ParamField>
+
+## JSON Output
+
+```bash
+connect whoami --json
+```
+
+Output:
+```json
+{
+  "agent": {
+    "id": "agent_abc123xyz789",
+    "name": "Production Server",
+    "label": "prod-api-01",
+    "hubUrl": "https://api.privateconnect.co",
+    "status": "online",
+    "lastSeenAt": "2024-01-15T10:30:45Z"
+  },
+  "workspace": {
+    "id": "ws_def456uvw012",
+    "name": "Acme Inc",
+    "role": "member"
+  },
+  "services": {
+    "exposed": [
+      {
+        "name": "postgres",
+        "port": 5432,
+        "protocol": "tcp"
+      },
+      {
+        "name": "redis",
+        "port": 6379,
+        "protocol": "tcp"
+      },
+      {
+        "name": "api",
+        "port": 8080,
+        "protocol": "http"
+      }
+    ],
+    "connected": [
+      {
+        "name": "staging-db",
+        "port": 5432
+      },
+      {
+        "name": "cache",
+        "port": 6379
+      }
+    ]
+  }
+}
+```
+
+## Use Cases
+
+### Verify Authentication
+
+```bash
+connect whoami
+# Check that agent is authenticated and connected
+```
+
+### CI/CD Verification
+
+```bash
+# In your CI pipeline
+connect whoami --json | jq -r '.agent.status'
+# → online
+```
+
+### Debugging
+
+```bash
+# Check which workspace you're in
+connect whoami | grep Workspace
+```
+
+### Multiple Agents
+
+When managing multiple agents with different config files:
+
+```bash
+connect whoami --config ~/.privateconnect/agent-prod.json
+connect whoami --config ~/.privateconnect/agent-staging.json
+```
+
+## Information Displayed
+
+### Agent Identity
+- **Agent ID** - Unique identifier
+- **Agent Name** - Friendly name (optional)
+- **Label** - Environment label (e.g., hostname)
+- **Hub URL** - Connected hub server
+
+### Workspace
+- **Workspace ID** - Workspace identifier
+- **Workspace Name** - Organization name
+- **Role** - Your role (admin, member)
+
+### Services
+- **Exposed Services** - Services you're sharing
+- **Connected Services** - Services you're accessing
+
+### Status
+- **Online/Offline** - Connection status
+- **Last Seen** - Last heartbeat timestamp
+
+## Related Commands
+
+- [`connect up`](/cli/up) - Authenticate and start agent
+- [`connect daemon status`](/cli/daemon) - Check daemon status
+- [Agents API](/api/agents) - Programmatic agent management
+
+## Exit Codes
+
+- `0` - Success (agent authenticated)
+- `1` - Error (not authenticated, network issue)

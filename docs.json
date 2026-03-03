@@ -49,11 +49,14 @@
               "cli/share",
               "cli/join",
               "cli/clone",
-              "cli/tunnel",
+              "cli/link",
               "cli/proxy",
               "cli/daemon",
               "cli/dev",
-              "cli/mcp"
+              "cli/mcp",
+              "cli/discover",
+              "cli/whoami",
+              "cli/delete"
             ]
           },
           {

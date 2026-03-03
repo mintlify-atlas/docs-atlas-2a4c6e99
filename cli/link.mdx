@@ -1,0 +1,185 @@
+---
+title: connect link
+description: Create public URLs for services
+---
+
+Create public URLs that allow external access to your services without requiring authentication. Perfect for webhooks, demos, and API sharing.
+
+## Usage
+
+```bash
+connect link [target] [options]
+```
+
+## Basic Examples
+
+### Create Public URL for Existing Service
+
+```bash
+connect link my-api
+# → https://abc123.privateconnect.co
+```
+
+### Auto-Detect and Expose
+
+If the service isn't exposed yet, `connect link` will detect and expose it:
+
+```bash
+connect link localhost:3000
+# → Detecting service on localhost:3000...
+# → Exposing as "api"...
+# → https://xyz789.privateconnect.co
+```
+
+### Webhook Testing
+
+```bash
+# Start your local server
+npm run dev
+
+# Create public URL
+connect link localhost:3000 --expires 2h
+# → https://webhook-test.privateconnect.co
+
+# Use in Stripe, GitHub, Twilio webhook settings
+```
+
+## Options
+
+<ParamField path="target" type="string">
+  Service name or target (e.g., `my-api` or `localhost:3000`)
+</ParamField>
+
+<ParamField path="--expires, -e" type="string" default="24h">
+  Expiration duration: `1h`, `24h`, `7d`, `30d`, or `never`
+</ParamField>
+
+<ParamField path="--methods, -m" type="string">
+  Allowed HTTP methods (comma-separated). Example: `GET,POST`
+</ParamField>
+
+<ParamField path="--paths, -p" type="string">
+  Allowed paths (comma-separated). Example: `/api,/health`. Paths must start with `/`
+</ParamField>
+
+<ParamField path="--rate-limit, -r" type="number">
+  Rate limit in requests per minute
+</ParamField>
+
+<ParamField path="--name, -n" type="string">
+  Service name (auto-detected if not provided)
+</ParamField>
+
+<ParamField path="--hub, -H" type="string" default="https://api.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--config, -c" type="string">
+  Config file path
+</ParamField>
+
+## Access Control Examples
+
+### Read-Only Access
+
+```bash
+connect link api --methods GET --expires 7d
+```
+
+### Specific Paths Only
+
+```bash
+connect link api --paths /api/public,/health --expires 30d
+```
+
+### Rate Limited
+
+```bash
+connect link api --rate-limit 100 --expires 24h
+# Max 100 requests per minute
+```
+
+### Combined Restrictions
+
+```bash
+connect link api \
+  --methods GET,POST \
+  --paths /api/v1 \
+  --rate-limit 60 \
+  --expires 7d
+```
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Webhook Development" icon="webhook">
+    Test Stripe, GitHub, Twilio webhooks against your local server
+  </Card>
+  <Card title="Open Source Contributions" icon="code-branch">
+    Let contributors access your API without sharing credentials
+  </Card>
+  <Card title="Client Demos" icon="presentation">
+    Share work-in-progress with clients securely
+  </Card>
+  <Card title="API Sharing" icon="share-nodes">
+    Provide temporary API access to partners or contractors
+  </Card>
+</CardGroup>
+
+## Link Management
+
+### View Active Links
+
+Links are managed through the web dashboard or API. Use the API to list active links:
+
+```bash
+curl https://api.privateconnect.co/v1/shares \
+  -H "x-api-key: your-api-key"
+```
+
+### Revoke a Link
+
+Revoke via API:
+
+```bash
+curl -X DELETE https://api.privateconnect.co/v1/shares/share_xxx \
+  -H "x-api-key: your-api-key"
+```
+
+## Security Best Practices
+
+<Note>
+Public links bypass authentication. Use access controls to limit exposure.
+</Note>
+
+<Warning>
+Database ports (5432, 3306, 27017, 6379) cannot be made public for security.
+</Warning>
+
+**Recommendations:**
+
+1. **Set expiration** - Use short durations for temporary access
+2. **Restrict methods** - Limit to `GET` for read-only access
+3. **Restrict paths** - Only expose specific endpoints
+4. **Add rate limits** - Prevent abuse
+5. **Monitor logs** - Check access patterns in audit logs
+
+## How It Works
+
+1. **Service Detection** - If target is `localhost:PORT`, service is auto-exposed
+2. **Link Creation** - Public URL is generated with optional restrictions
+3. **Reverse Proxy** - Requests are proxied to your local service
+4. **Access Control** - Methods, paths, and rate limits are enforced
+5. **Expiration** - Link auto-expires after the specified duration
+
+## Related Commands
+
+- [`connect expose`](/cli/expose) - Expose services (private access)
+- [`connect share`](/cli/share) - Share environments with teammates (requires authentication)
+- [Shares API](/api/shares) - Programmatic link management
+
+## Exit Codes
+
+- `0` - Success
+- `1` - Error (service not found, network issue)
+- `2` - Invalid arguments

@@ -1,0 +1,160 @@
+---
+title: connect discover
+description: Scan for local services and optionally expose them
+---
+
+Automatically detect running services on your local machine and expose them through Private Connect.
+
+## Usage
+
+```bash
+connect discover [options]
+```
+
+## Basic Example
+
+```bash
+connect discover
+```
+
+Output:
+```
+Scanning localhost for services...
+
+✓ Found 4 services:
+
+  Port   Protocol   Service       Status
+  ─────────────────────────────────────────
+  5432   postgres   postgres      Running
+  6379   redis      redis         Running
+  3000   http       web-server    Running
+  8080   http       api           Running
+
+Expose services? [y/N]:
+```
+
+## Options
+
+<ParamField path="--host" type="string" default="localhost">
+  Host to scan for services
+</ParamField>
+
+<ParamField path="--ports" type="string">
+  Comma-separated list of ports to scan. Example: `3000,5432,6379`
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output results as JSON
+</ParamField>
+
+<ParamField path="--config, -c" type="string">
+  Config file path
+</ParamField>
+
+## Examples
+
+### Scan Specific Ports
+
+```bash
+connect discover --ports 3000,5432,6379,8080
+```
+
+### JSON Output
+
+```bash
+connect discover --json
+```
+
+Output:
+```json
+{
+  "services": [
+    {
+      "port": 5432,
+      "protocol": "postgres",
+      "name": "postgres",
+      "status": "running"
+    },
+    {
+      "port": 6379,
+      "protocol": "redis",
+      "name": "redis",
+      "status": "running"
+    },
+    {
+      "port": 3000,
+      "protocol": "http",
+      "name": "web-server",
+      "status": "running"
+    }
+  ]
+}
+```
+
+### Scan Remote Host
+
+```bash
+connect discover --host 192.168.1.50
+```
+
+## Service Detection
+
+Private Connect automatically detects service types based on port and protocol:
+
+| Port  | Service Type |
+|-------|-------------|
+| 5432  | PostgreSQL  |
+| 3306  | MySQL       |
+| 27017 | MongoDB     |
+| 6379  | Redis       |
+| 80    | HTTP        |
+| 443   | HTTPS       |
+| 3000  | HTTP (dev)  |
+| 8080  | HTTP (alt)  |
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Onboarding" icon="user-plus">
+    Discover local services when setting up a new development environment
+  </Card>
+  <Card title="Environment Audit" icon="magnifying-glass">
+    See what services are running on a machine
+  </Card>
+  <Card title="Quick Setup" icon="bolt">
+    Rapidly expose multiple services at once
+  </Card>
+  <Card title="Troubleshooting" icon="wrench">
+    Verify which ports are in use
+  </Card>
+</CardGroup>
+
+## Interactive Mode
+
+When running `connect discover` without `--json`, you'll be prompted to expose discovered services:
+
+```bash
+connect discover
+# → Found 3 services
+# → Expose services? [y/N]: y
+# → Select services to expose:
+# →   [x] postgres (5432)
+# →   [x] redis (6379)
+# →   [ ] web-server (3000)
+# → 
+# → Exposing 2 services...
+# → ✓ postgres → localhost:5432
+# → ✓ redis → localhost:6379
+```
+
+## Related Commands
+
+- [`connect expose`](/cli/expose) - Manually expose services
+- [`connect dev`](/cli/dev) - Project-based service management
+- [`connect whoami`](/cli/whoami) - Check agent status
+
+## Exit Codes
+
+- `0` - Success
+- `1` - Error (network issue, permission denied)
+- `2` - Invalid arguments

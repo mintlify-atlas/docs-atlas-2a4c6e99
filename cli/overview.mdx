@@ -8,7 +8,13 @@ The Private Connect CLI (`connect`) enables you to expose, access, and manage se
 ## Installation
 
 ```bash
-npm install -g @privateconnect/cli
+npm install -g private-connect
+```
+
+Or use the install script:
+
+```bash
+curl -fsSL https://privateconnect.co/install.sh | bash
 ```
 
 ## Quick Start
@@ -90,6 +96,7 @@ connect clone alex
 - [`connect up`](/cli/up) - Start the Private Connect agent
 - [`connect expose`](/cli/expose) - Expose a local service
 - [`connect reach`](/cli/reach) - Access a remote service
+- [`connect link`](/cli/link) - Create public URLs for services
 - [`connect share`](/cli/share) - Share your environment
 - [`connect join`](/cli/join) - Join a shared environment
 - [`connect clone`](/cli/clone) - Clone a teammate's environment
@@ -98,6 +105,11 @@ connect clone alex
 - [`connect proxy`](/cli/proxy) - HTTP/HTTPS proxy server
 - [`connect daemon`](/cli/daemon) - Background daemon management
 - [`connect dev`](/cli/dev) - Project-based development mode
+
+### Utility Commands
+- [`connect discover`](/cli/discover) - Scan for local services
+- [`connect whoami`](/cli/whoami) - Display agent identity
+- [`connect delete`](/cli/delete) - Delete a service
 
 ### Integration Commands
 - [`connect mcp`](/cli/mcp) - AI assistant integration (Model Context Protocol)

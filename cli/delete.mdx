@@ -1,0 +1,167 @@
+---
+title: connect delete
+description: Delete a service and stop all its tunnels
+---
+
+Remove a service and terminate all active tunnels associated with it.
+
+## Usage
+
+```bash
+connect delete <service> [options]
+```
+
+## Basic Example
+
+```bash
+connect delete my-api
+```
+
+Output:
+```
+⚠️  This will permanently delete the service "my-api" and stop all tunnels.
+   Continue? [y/N]: y
+
+✓ Service deleted
+✓ 3 tunnels stopped
+```
+
+## Options
+
+<ParamField path="service" type="string" required>
+  Name of the service to delete
+</ParamField>
+
+<ParamField path="--force, -f" type="boolean">
+  Skip confirmation prompt
+</ParamField>
+
+<ParamField path="--hub, -H" type="string" default="https://api.privateconnect.co">
+  Hub server URL
+</ParamField>
+
+<ParamField path="--config, -c" type="string">
+  Config file path
+</ParamField>
+
+## Examples
+
+### Delete Without Confirmation
+
+```bash
+connect delete my-api --force
+```
+
+### Delete Multiple Services
+
+```bash
+connect delete postgres --force
+connect delete redis --force
+connect delete api --force
+```
+
+Or use a script:
+
+```bash
+#!/bin/bash
+for service in postgres redis api; do
+  connect delete $service --force
+done
+```
+
+## What Gets Deleted
+
+When you delete a service:
+
+1. **Service registration** - Removed from workspace
+2. **Active tunnels** - All tunnels to this service are terminated
+3. **Port mappings** - Custom port mappings are cleared
+4. **Public URLs** - Public links are revoked
+5. **Share links** - Shares including this service are updated
+
+<Note>
+Deleting a service does not stop the underlying application. It only removes the Private Connect tunnel.
+</Note>
+
+## Impact on Other Users
+
+When you delete a service that others are connected to:
+
+- **Active connections drop** - Tunnels close immediately
+- **Shared environments** - Service removed from shares
+- **Clone configurations** - `.env` files become outdated
+
+<Warning>
+Deleting a service affects all users in your workspace who are connected to it.
+</Warning>
+
+## Recreating a Service
+
+To recreate a deleted service with the same name:
+
+```bash
+connect expose localhost:5432 --name postgres
+```
+
+<Tip>
+If you only want to temporarily stop exposing a service, stop the `connect expose` process instead of deleting the service.
+</Tip>
+
+## Common Use Cases
+
+### Cleanup After Development
+
+```bash
+# Remove test services
+connect delete test-api --force
+connect delete staging-db --force
+```
+
+### Rename a Service
+
+Services cannot be renamed directly. Delete and recreate:
+
+```bash
+connect delete old-name --force
+connect expose localhost:8080 --name new-name
+```
+
+### Remove Abandoned Services
+
+When a machine is decommissioned:
+
+```bash
+# List all services
+connect proxy  # or use web dashboard
+
+# Delete services from old machines
+connect delete old-server-api --force
+```
+
+## Bulk Deletion
+
+For deleting multiple services programmatically, use the API:
+
+```bash
+# Get all services
+curl https://api.privateconnect.co/v1/services \
+  -H "x-api-key: your-api-key" | jq -r '.[].name'
+
+# Delete each service
+for service in $(cat services.txt); do
+  curl -X DELETE https://api.privateconnect.co/v1/services/$service \
+    -H "x-api-key: your-api-key"
+done
+```
+
+## Related Commands
+
+- [`connect expose`](/cli/expose) - Create services
+- [Services API](/api/services) - Programmatic service management
+- [Tunnels API](/api/tunnels) - Manage tunnels
+
+## Exit Codes
+
+- `0` - Success (service deleted)
+- `1` - Error (service not found, permission denied)
+- `2` - User cancelled (when prompted)
